@@ -5,34 +5,26 @@ import { useRouter } from 'next/navigation';
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'mitra'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'mitra'>('stock');
 
   const [reports, setReports] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
 
-  // Form State Tambah Mitra
-  const [namaToko, setNamaToko] = useState('');
-  const [owner, setOwner] = useState('');
-  const [alamat, setAlamat] = useState('');
-  const [kontak, setKontak] = useState('');
-  const [fee, setFee] = useState('15');
-  const [pasword, setPasword] = useState('123456');
-  const [photoBase64, setPhotoBase64] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Form State Tambah Stock
+  // Form State Input/Edit Stock
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [category, setCategory] = useState('TOPI');
   const [sku, setSku] = useState('');
   const [productName, setProductName] = useState('');
-  const [category, setCategory] = useState('TOPI');
+  const [stockQty, setStockQty] = useState('');
   const [price, setPrice] = useState('');
   const [productPhoto, setProductPhoto] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Selected Mitra untuk Tab Mitra
-  const [selectedMitraId, setSelectedMitraId] = useState<string>('');
-  const [qrModalData, setQrModalData] = useState<any>(null);
+  // Category Filter State for LIST STOCK
+  const [shortCategory, setShortCategory] = useState('ALL');
 
-  // FETCH ALL DATA (REAL-TIME REFRESH)
+  // FETCH ALL DATA FROM SUPABASE
   const fetchData = async () => {
     try {
       const [resR, resP, resS] = await Promise.all([
@@ -41,21 +33,11 @@ export default function AdminDashboardPage() {
         fetch('/api/stores'),
       ]);
 
-      if (resR.ok) {
-        const dataR = await resR.json();
-        dataR.sort((a: any, b: any) => b.totalQty - a.totalQty);
-        setReports(dataR);
-        if (dataR.length > 0 && !selectedMitraId) {
-          setSelectedMitraId(dataR[0].storeId.toString());
-        }
-      }
+      if (resR.ok) setReports(await resR.json());
       if (resP.ok) setProducts(await resP.json());
-      if (resS.ok) {
-        const dataS = await resS.json();
-        setStores(dataS);
-      }
+      if (resS.ok) setStores(await resS.json());
     } catch (err) {
-      console.error('Error fetching dashboard data:', err);
+      console.error('Error fetching data:', err);
     }
   };
 
@@ -63,8 +45,8 @@ export default function AdminDashboardPage() {
     fetchData();
   }, []);
 
-  // Upload Photo Auto Compress (200x200)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setTarget: (val: string) => void) => {
+  // AUTO COMPRESS PHOTO TO 200x200 PX
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -81,7 +63,7 @@ export default function AdminDashboardPage() {
           const sx = (img.width - minDim) / 2;
           const sy = (img.height - minDim) / 2;
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 200, 200);
-          setTarget(canvas.toDataURL('image/webp', 0.8));
+          setProductPhoto(canvas.toDataURL('image/webp', 0.8));
         }
       };
       img.src = event.target?.result as string;
@@ -89,93 +71,57 @@ export default function AdminDashboardPage() {
     reader.readAsDataURL(file);
   };
 
-  // HANDLER SUBMIT TAMBAH MITRA (AUTO REFRESH + GOOGLE SHEETS SYNC)
-  const handleAddMitra = async (e: React.FormEvent) => {
+  // SUBMIT HANDLER FOR TAMBAH/EDIT STOK
+  const handleStockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: namaToko,
-          phone: kontak,
-          owner,
-          alamat,
-          commissionRate: parseFloat(fee),
-          password: pasword,
-          photoUrl: photoBase64,
-          username: namaToko.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
-        }),
-      });
+      const endpoint = editingProductId ? `/api/products/${editingProductId}` : '/api/products';
+      const method = editingProductId ? 'PUT' : 'POST';
 
-      if (res.ok) {
-        const newStore = await res.json();
-        
-        // SYNC AUTOMATICALLY TO GOOGLE SHEETS WEBHOOK
-        const sheetsUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
-        if (sheetsUrl) {
-          fetch(sheetsUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ADD_MITRA', ...newStore }),
-          }).catch(console.error);
-        }
-
-        alert('Mitra Berhasil Ditambahkan & Tersinkron!');
-        setNamaToko(''); setOwner(''); setAlamat(''); setKontak(''); setPhotoBase64('');
-        
-        // INSTANT REFRESH LISTING DAFTAR MITRA
-        await fetchData();
-      } else {
-        alert('Gagal menambah mitra.');
-      }
-    } catch (err: any) {
-      alert('Error: ' + err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // HANDLER SUBMIT TAMBAH STOK
-  const handleAddProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const res = await fetch('/api/products', {
-        method: 'POST',
+      const res = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sku,
           name: productName,
           category,
           price: parseFloat(price),
+          stock: parseInt(stockQty) || 0,
           photoUrl: productPhoto,
         }),
       });
 
       if (res.ok) {
-        const newProduct = await res.json();
+        const resultData = await res.json();
 
-        // SYNC TO GOOGLE SHEETS
+        // GOOGLE SHEETS AUTOMATIC WEBHOOK SYNC
         const sheetsUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
         if (sheetsUrl) {
           fetch(sheetsUrl, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ADD_PRODUCT', ...newProduct }),
+            body: JSON.stringify({ action: editingProductId ? 'EDIT_PRODUCT' : 'ADD_PRODUCT', ...resultData }),
           }).catch(console.error);
         }
 
-        alert('Stok Produk Berhasil Ditambahkan!');
-        setSku(''); setProductName(''); setPrice(''); setProductPhoto('');
+        alert(editingProductId ? 'Stok produk berhasil diperbarui!' : 'Stok produk berhasil ditambahkan ke listing!');
+
+        // RESET FORM
+        setEditingProductId(null);
+        setCategory('TOPI');
+        setSku('');
+        setProductName('');
+        setStockQty('');
+        setPrice('');
+        setProductPhoto('');
+
+        // REFRESH LISTING AUTOMATICALLY
         await fetchData();
       } else {
-        alert('Gagal menambah stok produk.');
+        alert('Gagal menyimpan stok produk.');
       }
     } catch (err: any) {
       alert('Error: ' + err.message);
@@ -184,40 +130,26 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // HANDLER CREATE UNIQUE QR
-  const handleCreateQR = async (productId: number) => {
-    if (!selectedMitraId) return alert('Pilih Toko Mitra terlebih dahulu!');
-    const res = await fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: selectedMitraId, productId, stockToAdd: 0 }),
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      setQrModalData(data);
-    } else {
-      alert('Gagal membuat QR Tag: ' + data.error);
-    }
+  // EDIT CLICK HANDLER
+  const handleEditClick = (p: any) => {
+    setEditingProductId(p.id);
+    setCategory(p.category || 'TOPI');
+    setSku(p.sku || '');
+    setProductName(p.name || '');
+    setPrice(p.price?.toString() || '');
+    setStockQty(p.stock?.toString() || '12');
+    setProductPhoto(p.photoUrl || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // METRIK AKUMULASI
-  const totalMitraCount = stores.length || reports.length;
-  const totalVarianCount = products.length;
-  const totalTerjualBulanIni = reports.reduce((sum, r) => sum + (r.totalQty || 0), 0);
-  const totalLimitedStock = reports.reduce((sum, r) => {
-    const lowItems = r.stockList?.filter((i: any) => i.stock < 5).length || 0;
-    return sum + lowItems;
-  }, 0);
-
-  const totalPenjualanRp = reports.reduce((sum, r) => sum + (r.totalGrossSales || 0), 0);
-  const totalShareProfitRp = reports.reduce((sum, r) => sum + (r.totalStoreCommission || 0), 0);
-
-  const activeMitraData = reports.find((r) => r.storeId.toString() === selectedMitraId) || reports[0];
+  // FILTERED PRODUCTS FOR LIST STOCK
+  const filteredProducts = shortCategory === 'ALL'
+    ? products
+    : products.filter((p) => p.category?.toUpperCase() === shortCategory);
 
   return (
     <div className="min-h-screen bg-[#EFECE6] text-[#333333] font-sans antialiased pb-20">
-      {/* HEADER LOGO CAPSHOE & LOGOUT */}
+      {/* HEADER LOGO & LOGOUT */}
       <header className="bg-[#D8D4CA] px-6 py-4 border-b border-[#C8C4B8] flex justify-between items-center">
         <div className="flex items-center gap-2">
           <div className="text-[#00A896] text-xl font-black font-serif">Capshoe</div>
@@ -236,348 +168,251 @@ export default function AdminDashboardPage() {
         </button>
       </header>
 
-      {/* NAVIGATION TABS */}
+      {/* TABS NAVIGATION BAR */}
       <div className="bg-[#D8D4CA] border-b border-[#C8C4B8] px-4">
         <div className="max-w-xl mx-auto flex justify-center gap-1 pt-2">
-          {['dashboard', 'stock', 'mitra'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
-                activeTab === tab ? 'bg-[#EFECE6] text-[#333333]' : 'bg-[#00A896] text-white'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'dashboard' ? 'bg-[#EFECE6] text-[#333333]' : 'bg-[#00A896] text-white'
+            }`}
+          >
+            DASHBOARD
+          </button>
+          <button
+            onClick={() => setActiveTab('stock')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'stock' ? 'bg-[#EFECE6] text-[#333333]' : 'bg-[#00A896] text-white'
+            }`}
+          >
+            STOCK
+          </button>
+          <button
+            onClick={() => setActiveTab('mitra')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'mitra' ? 'bg-[#EFECE6] text-[#333333]' : 'bg-[#00A896] text-white'
+            }`}
+          >
+            MITRA
+          </button>
         </div>
       </div>
 
       <main className="max-w-xl mx-auto px-4 pt-6 space-y-8">
-        {/* ================= TAB 1: DASHBOARD ================= */}
-        {activeTab === 'dashboard' && (
+        {/* ================= TAB STOCK ================= */}
+        {activeTab === 'stock' && (
           <>
+            {/* TITLE: INPUT STOCK */}
             <div className="text-center">
-              <h2 className="text-xs font-bold tracking-[0.2em] uppercase text-[#555555]">
-                SELAMAT DATANG DI HALAMAN<br />DASHBOARD MITRA.
+              <h2 className="text-xs font-bold tracking-[0.3em] uppercase text-[#333333]">
+                {editingProductId ? 'EDIT STOCK PRODUK' : 'INPUT STOCK'}
               </h2>
             </div>
 
-            {/* 4 TOP METRIC CARDS */}
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">JUMLAH MITRA</p>
-                <p className="text-2xl font-normal text-[#333333] font-serif">{totalMitraCount}</p>
+            {/* FORM CARD INPUT STOCK */}
+            <div className="bg-[#EFECE6] border border-[#CCCCCC] p-5 shadow-2xs">
+              <form onSubmit={handleStockSubmit} className="space-y-4">
+                <div className="flex gap-4 items-start">
+                  {/* LEFT FORM FIELDS */}
+                  <div className="flex-1 space-y-2 text-[9px] font-bold uppercase">
+                    <div className="flex items-center gap-2">
+                      <span className="w-24 text-[#555555]">CATEGORY</span>
+                      <div className="relative flex-1">
+                        <select
+                          value={category}
+                          onChange={(e) => setCategory(e.target.value)}
+                          className="w-full bg-white border border-[#B3AE9F] p-1.5 text-[9px] uppercase outline-none appearance-none"
+                        >
+                          <option value="TOPI">TOPI</option>
+                          <option value="PAKAIAN">PAKAIAN</option>
+                          <option value="AKSESORIS">AKSESORIS</option>
+                          <option value="SEPATU">SEPATU</option>
+                        </select>
+                        <span className="absolute right-2 top-2 text-[8px] pointer-events-none">▼</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="w-24 text-[#555555]">SKU PRODUCT</span>
+                      <input
+                        type="text"
+                        value={sku}
+                        onChange={(e) => setSku(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1.5 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="w-24 text-[#555555]">NAMA PRODUCT</span>
+                      <input
+                        type="text"
+                        value={productName}
+                        onChange={(e) => setProductName(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1.5 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="w-24 text-[#555555]">STOCK</span>
+                      <input
+                        type="number"
+                        value={stockQty}
+                        onChange={(e) => setStockQty(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1.5 text-[9px] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* RIGHT FORM FIELDS & UPLOAD PHOTO */}
+                  <div className="w-36 space-y-3">
+                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase">
+                      <span className="text-[#555555]">HARGA</span>
+                      <input
+                        type="number"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        required
+                        className="w-full bg-white border border-[#B3AE9F] p-1.5 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    {/* UPLOAD PHOTO CYAN BUTTON */}
+                    <label className="w-full h-24 bg-[#00A896] hover:bg-[#008D7D] text-white flex flex-col items-center justify-center p-2 text-center cursor-pointer transition relative overflow-hidden">
+                      {productPhoto ? (
+                        <img src={productPhoto} alt="Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[9px] font-bold tracking-wider uppercase leading-tight">
+                          UPLOAD PHOTO HERE
+                        </span>
+                      )}
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+
+                    {/* SUBMIT BUTTON */}
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full bg-[#8D5B4C] hover:bg-[#7A4E41] text-white py-2 text-[10px] font-bold tracking-[0.2em] uppercase transition"
+                    >
+                      {isSubmitting ? 'SAVING...' : 'SUBMIT'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* TITLE: LIST STOCK */}
+            <div className="pt-4 text-center">
+              <h2 className="text-sm font-bold tracking-[0.3em] uppercase text-[#333333]">
+                LIST STOCK
+              </h2>
+            </div>
+
+            {/* HEADER TABLE & SHORT BY CATEGORY */}
+            <div className="flex justify-between items-center text-[8px] font-bold uppercase tracking-wider text-[#666666]">
+              <div className="flex items-center gap-2">
+                <span>SHORT BY CATEGORY</span>
+                <select
+                  value={shortCategory}
+                  onChange={(e) => setShortCategory(e.target.value)}
+                  className="bg-transparent border-b border-[#888888] text-[8px] font-bold outline-none"
+                >
+                  <option value="ALL">ALL CATEGORIES</option>
+                  <option value="TOPI">TOPI</option>
+                  <option value="PAKAIAN">PAKAIAN</option>
+                  <option value="AKSESORIS">AKSESORIS</option>
+                  <option value="SEPATU">SEPATU</option>
+                </select>
               </div>
-              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">TOTAL VARIAN PRODUK</p>
-                <p className="text-2xl font-normal text-[#333333] font-serif">{totalVarianCount}</p>
-              </div>
-              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">TERJUAL BULAN INI</p>
-                <p className="text-2xl font-normal text-[#333333] font-serif">{totalTerjualBulanIni}</p>
-              </div>
-              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">REMINDER LIMITED STOCK</p>
-                <p className="text-2xl font-normal text-[#333333] font-serif">{totalLimitedStock}</p>
+              <div className="flex items-center gap-1 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                <span>UP</span>
+                <span>▲</span>
               </div>
             </div>
 
-            {/* 2 TOTAL SUMMARY CARDS */}
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">TOTAL PENJUALAN BULAN INI</p>
-                <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
-                  IDR. {totalPenjualanRp.toLocaleString('id-ID')}
-                </p>
-              </div>
-              <div>
-                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">TOTAL SHARE PROFIT</p>
-                <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
-                  IDR. {totalShareProfitRp.toLocaleString('id-ID')}
-                </p>
-              </div>
+            {/* COLUMN HEADERS */}
+            <div className="grid grid-cols-6 gap-2 text-center text-[7px] font-bold uppercase tracking-widest text-[#777777] border-b pb-1">
+              <span>PHOTO</span>
+              <span>SKU</span>
+              <span>NAMA PRODUCT</span>
+              <span>CATEGORY</span>
+              <span>STOCK</span>
+              <span>PRICE</span>
             </div>
 
-            <hr className="border-t-2 border-[#8E7CC3] my-4" />
-
-            {/* DAFTAR MITRA (REAL-TIME UPDATED) */}
-            <div className="space-y-4">
-              <h3 className="text-center text-sm font-bold tracking-[0.25em] uppercase text-[#333333]">
-                DAFTAR MITRA
-              </h3>
-
-              {reports.map((item) => (
-                <div key={item.storeId} className="border border-[#CCCCCC] bg-[#EFECE6] p-3 flex gap-3 items-center shadow-2xs">
+            {/* LIST STOCK ITEMS */}
+            <div className="space-y-3">
+              {filteredProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="border border-[#CCCCCC] bg-[#EFECE6] p-2 flex gap-2 items-center shadow-2xs"
+                >
+                  {/* PHOTO */}
                   <img
-                    src={item.photoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200'}
-                    alt={item.storeName}
-                    className="w-20 h-20 object-cover border border-[#CCCCCC]"
+                    src={p.photoUrl || 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=150'}
+                    alt={p.name}
+                    className="w-14 h-14 object-cover border border-[#CCCCCC]"
                   />
 
-                  <div className="flex-1 space-y-2">
-                    <div>
-                      <h4 className="font-bold text-xs tracking-wider uppercase text-[#333333]">{item.storeName}</h4>
-                      <p className="text-[9px] uppercase tracking-wider text-[#666666]">{item.alamat || 'MANTANG'}</p>
+                  {/* DETAILS GRID */}
+                  <div className="flex-1 grid grid-cols-5 gap-1.5 text-center text-[8px] font-bold uppercase">
+                    <div className="bg-[#E5E0D8] p-2 border border-[#CCCCCC] flex items-center justify-center">
+                      <span>{p.sku || 'TOP-01'}</span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1 text-center">
-                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
-                        <p className="text-[6px] font-bold uppercase text-[#777777]">TOTAL PENJUALAN</p>
-                        <p className="text-xs font-bold text-[#333333]">{item.totalQty || 0}</p>
-                      </div>
-                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
-                        <p className="text-[6px] font-bold uppercase text-[#777777]">SISA STOCK</p>
-                        <p className="text-xs font-bold text-[#333333]">{item.totalStock || 0}</p>
-                      </div>
-                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
-                        <p className="text-[6px] font-bold uppercase text-[#777777]">ORDER STOCK</p>
-                        <p className="text-xs font-bold text-[#333333]">5</p>
-                      </div>
+                    <div className="bg-[#E5E0D8] p-2 border border-[#CCCCCC] flex items-center justify-center">
+                      <span className="truncate">{p.name}</span>
+                    </div>
+
+                    <div className="bg-[#E5E0D8] p-2 border border-[#CCCCCC] flex items-center justify-center">
+                      <span>{p.category || 'TOPI'}</span>
+                    </div>
+
+                    <div className="bg-[#E5E0D8] p-2 border border-[#CCCCCC] flex items-center justify-center">
+                      <span>{p.stock || 12}</span>
+                    </div>
+
+                    <div className="bg-[#E5E0D8] p-2 border border-[#CCCCCC] flex items-center justify-center">
+                      <span>IDR. {(p.price || 300000).toLocaleString('id-ID')}</span>
                     </div>
                   </div>
 
-                  <div className="w-24 text-right space-y-1.5">
-                    <div>
-                      <p className="text-[7px] font-bold uppercase text-[#777777]">PROFIT</p>
-                      <p className="text-[10px] font-bold text-[#333333]">
-                        IDR. {(item.totalStoreCommission || 0).toLocaleString('id-ID')}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => window.open(`https://wa.me/${(item.phone || '').replace(/[^0-9]/g, '')}`, '_blank')}
-                      className="w-full bg-[#E5E0D8] text-[#333333] py-1 text-[8px] font-bold uppercase tracking-wider border border-[#CCCCCC]"
-                    >
-                      INBOX
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedMitraId(item.storeId.toString());
-                        setActiveTab('mitra');
-                      }}
-                      className="w-full bg-[#8D5B4C] hover:bg-[#7A4E41] text-white py-1 text-[8px] font-bold uppercase tracking-wider"
-                    >
-                      EDIT INFO
-                    </button>
-                  </div>
+                  {/* EDIT BUTTON */}
+                  <button
+                    type="button"
+                    onClick={() => handleEditClick(p)}
+                    className="bg-[#8D5B4C] hover:bg-[#7A4E41] text-white px-3 py-4 text-[9px] font-bold uppercase tracking-widest"
+                  >
+                    EDIT
+                  </button>
                 </div>
               ))}
             </div>
 
-            <hr className="border-t-2 border-[#8E7CC3] my-4" />
-
-            {/* FORM TAMBAH MITRA (AUTO REFRESH + SYNC) */}
-            <div className="bg-[#C8C4B8] border border-[#B8B4A8] p-4 space-y-4">
-              <h3 className="text-center text-xs font-bold tracking-[0.25em] uppercase text-[#333333]">
-                TAMBAH MITRA
-              </h3>
-
-              <form onSubmit={handleAddMitra} className="space-y-3">
-                <div className="flex gap-3 items-center">
-                  <label className="w-24 h-20 bg-[#00A896] text-white flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:bg-[#008D7D] transition">
-                    <span className="text-[8px] font-bold tracking-wider uppercase leading-tight">
-                      UPLOAD PHOTO HERE
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handlePhotoUpload(e, setPhotoBase64)}
-                      className="hidden"
-                    />
-                  </label>
-
-                  <div className="flex-1 grid grid-cols-2 gap-2 text-[9px] font-bold uppercase">
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">NAMA TOKO</span>
-                      <input
-                        type="text"
-                        value={namaToko}
-                        onChange={(e) => setNamaToko(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">KONTAK</span>
-                      <input
-                        type="text"
-                        value={kontak}
-                        onChange={(e) => setKontak(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">OWNER</span>
-                      <input
-                        type="text"
-                        value={owner}
-                        onChange={(e) => setOwner(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">FEE (%)</span>
-                      <input
-                        type="number"
-                        value={fee}
-                        onChange={(e) => setFee(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">ALAMAT</span>
-                      <input
-                        type="text"
-                        value={alamat}
-                        onChange={(e) => setAlamat(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-16">PASWORD</span>
-                      <input
-                        type="text"
-                        value={pasword}
-                        onChange={(e) => setPasword(e.target.value)}
-                        required
-                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-center pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="bg-[#8D5B4C] hover:bg-[#7A4E41] text-white px-8 py-2 text-xs font-bold tracking-[0.2em] uppercase transition"
-                  >
-                    {isSubmitting ? 'MENYIMPAN...' : 'SUBMIT'}
-                  </button>
-                </div>
-              </form>
+            {/* DOWN ARROW FOOTER */}
+            <div className="text-center pt-2">
+              <span className="text-lg text-[#666666]">▼</span>
             </div>
           </>
         )}
 
-        {/* ================= TAB 2: STOCK ================= */}
-        {activeTab === 'stock' && (
-          <div className="space-y-6">
-            <div className="bg-white p-4 border border-[#CCCCCC] space-y-4">
-              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">INPUT STOCK BARU</h3>
-              <form onSubmit={handleAddProduct} className="grid grid-cols-2 gap-3 text-xs font-bold uppercase">
-                <input
-                  type="text"
-                  placeholder="SKU (Contoh: TOP-01)"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  required
-                  className="p-2 border"
-                />
-                <input
-                  type="text"
-                  placeholder="NAMA PRODUK"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  required
-                  className="p-2 border"
-                />
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="p-2 border">
-                  <option value="TOPI">TOPI</option>
-                  <option value="PAKAIAN">PAKAIAN</option>
-                  <option value="AKSESORIS">AKSESORIS</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="HARGA (IDR)"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  required
-                  className="p-2 border"
-                />
-                <div className="col-span-2">
-                  <label className="text-[10px]">Upload Foto Produk (Auto 200x200):</label>
-                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setProductPhoto)} className="w-full p-2 border mt-1" />
-                </div>
-                <button type="submit" disabled={isSubmitting} className="col-span-2 bg-[#8D5B4C] text-white py-2 font-bold uppercase">
-                  {isSubmitting ? 'MENYIMPAN...' : 'SUBMIT STOK'}
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">LIST STOK KESELURUHAN</h3>
-              {products.map((p) => (
-                <div key={p.id} className="border bg-white p-3 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-xs">{p.name} ({p.sku})</h4>
-                    <p className="text-[10px] text-gray-500">Kategori: {p.category} | IDR {p.price?.toLocaleString('id-ID')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* TAB DASHBOARD PLACEHOLDER */}
+        {activeTab === 'dashboard' && (
+          <div className="text-center py-10 text-xs font-bold uppercase">
+            Halaman Dashboard (Klik Tab STOCK untuk mengelola stok)
           </div>
         )}
 
-        {/* ================= TAB 3: MITRA ================= */}
+        {/* TAB MITRA PLACEHOLDER */}
         {activeTab === 'mitra' && (
-          <div className="space-y-6">
-            <div className="bg-white p-4 border border-[#CCCCCC] space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold uppercase">PILIH NAMA TOKO: </label>
-                <select
-                  value={selectedMitraId}
-                  onChange={(e) => setSelectedMitraId(e.target.value)}
-                  className="p-2 border font-bold text-xs uppercase"
-                >
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">STOK TOKO TERPILIH</h3>
-              {activeMitraData?.stockList?.map((item: any) => (
-                <div key={item.inventoryId} className="border bg-white p-3 flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold text-xs">{item.productName}</h4>
-                    <p className="text-[10px] text-gray-500">Stok Toko: {item.stock} pcs | IDR {item.price?.toLocaleString('id-ID')}</p>
-                  </div>
-                  <button
-                    onClick={() => handleCreateQR(item.productId)}
-                    className="bg-[#8D5B4C] text-white px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest"
-                  >
-                    CREATE QR
-                  </button>
-                </div>
-              ))}
-            </div>
+          <div className="text-center py-10 text-xs font-bold uppercase">
+            Halaman Mitra
           </div>
         )}
       </main>
-
-      {/* MODAL QR PAYMENT DISPLAY */}
-      {qrModalData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 max-w-sm w-full text-center space-y-4 rounded shadow-2xl">
-            <h3 className="font-bold uppercase text-sm tracking-widest text-[#00A896]">QR PAYMENT UNIK (FLIP.ID)</h3>
-            <img src={qrModalData.qrImageDataUrl} alt="QR Code" className="w-48 h-48 mx-auto border p-2" />
-            <button onClick={() => setQrModalData(null)} className="w-full bg-gray-200 py-2 text-xs font-bold uppercase">
-              TUTUP
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
