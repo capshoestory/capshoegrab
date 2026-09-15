@@ -22,7 +22,9 @@ export async function POST(req: Request) {
     });
 
     // Buat URL checkout yang tertanam di QR Code
-    const checkoutUrl = `http://localhost:3000/checkout/${qrCodeKey}`;
+    // Buat URL checkout yang tertanam di QR Code
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://capshoe.vercel.app';
+    const checkoutUrl = `${baseUrl}/checkout/${qrCodeKey}`;
     const qrImageDataUrl = await QRCode.toDataURL(checkoutUrl, { width: 300 });
 
     return NextResponse.json({
