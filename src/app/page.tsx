@@ -27,43 +27,59 @@ export default function LoginMitra() {
   };
 
   return (
-    <div className="min-h-screen bg-[#00A896] flex flex-col items-center justify-between p-6 text-[#333333]">
-      <div className="text-center pt-8">
-        <h1 className="text-5xl font-black tracking-widest text-[#008073]/40 font-sans">GRAB</h1>
-        <div className="mt-2 inline-block border border-white/40 px-6 py-2 rounded-full bg-white/10 backdrop-blur-xs">
-          <h2 className="text-2xl font-bold text-white tracking-wider">Capshoe</h2>
-          <p className="text-[9px] uppercase tracking-[0.25em] text-white/80">Adventure Story</p>
+    <div className="min-h-screen bg-[#00A896] flex flex-col items-center justify-between py-10 px-6 text-[#333333] font-sans antialiased">
+      {/* HEADER LOGO & BRANDING */}
+      <div className="text-center space-y-2 pt-4">
+        <h1 className="text-6xl font-black tracking-[0.25em] text-[#008073]/30 font-sans uppercase select-none">
+          GRAB
+        </h1>
+        
+        <div className="relative inline-block border-x border-white/30 px-8 py-2">
+          <h2 className="text-3xl font-bold text-white tracking-wider font-serif">
+            Capshoe
+          </h2>
+          <p className="text-[9px] uppercase tracking-[0.3em] text-white/90 font-medium">
+            Adventure Story
+          </p>
+        </div>
+
+        <div className="pt-6">
+          <p className="text-[11px] tracking-[0.25em] uppercase text-white font-medium leading-relaxed">
+            Selamat Datang Di<br />Halaman Login.
+          </p>
         </div>
       </div>
 
-      <div className="w-full max-w-sm bg-[#EFECE6] p-8 shadow-xl space-y-4 text-center">
-        <p className="text-[10px] tracking-[0.2em] uppercase text-[#666666] font-medium">
-          SILAHKAN MENGISI ID TOKO DI BAWAH INI
+      {/* CARD FORM LOGIN */}
+      <div className="w-full max-w-sm bg-[#EFECE6] p-8 shadow-2xl space-y-5 text-center my-6">
+        <p className="text-[10px] tracking-[0.2em] uppercase text-[#666666] font-medium leading-relaxed">
+          Silahkan Mengisi ID Toko<br />Di Bawah Ini
         </p>
 
-        <form onSubmit={handleLogin} className="space-y-3">
+        <form onSubmit={handleLogin} className="space-y-4">
           <input
             type="text"
             placeholder="NAMA TOKO"
             value={namaToko}
             onChange={(e) => setNamaToko(e.target.value)}
-            className="w-full bg-[#E5E0D8] border border-[#CCCCCC] p-3 text-center text-xs tracking-widest uppercase outline-none"
+            className="w-full bg-[#E5E0D8] border border-[#B3AE9F] p-3 text-center text-xs tracking-[0.2em] uppercase text-[#333333] outline-none placeholder-[#888888]"
             required
           />
+
           <input
             type="password"
             placeholder="PASWORD"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-[#E5E0D8] border border-[#CCCCCC] p-3 text-center text-xs tracking-widest outline-none"
+            className="w-full bg-[#E5E0D8] border border-[#B3AE9F] p-3 text-center text-xs tracking-[0.2em] uppercase text-[#333333] outline-none placeholder-[#888888]"
             required
           />
 
-          <div className="pt-2">
+          <div className="pt-1">
             <button
               type="button"
               onClick={() => router.push('/admin/login')}
-              className="text-[9px] tracking-[0.15em] uppercase text-[#666666] underline hover:text-black"
+              className="text-[10px] tracking-[0.2em] uppercase text-[#333333] underline hover:text-[#00A896] transition font-medium"
             >
               MASUK SEBAGAI ADMIN
             </button>
@@ -71,26 +87,43 @@ export default function LoginMitra() {
 
           <button
             type="submit"
-            className="w-full bg-[#00A896] text-white py-3 text-xs tracking-[0.2em] font-bold uppercase transition hover:bg-[#008D7D]"
+            className="w-full bg-[#008D7D] hover:bg-[#007A6C] text-white py-3 text-xs tracking-[0.25em] font-bold uppercase transition shadow-xs"
           >
             MASUK
           </button>
         </form>
 
         <a
-          href="https://wa.me/6285924761500?text=Halo%20Admin,%20saya%20lupa%20password%20toko%20mitra"
+          href="https://wa.me/6285924761500?text=Halo%20Admin,%20saya%20lupa%20password%20toko%20mitra"[cite: 1]
           target="_blank"
           rel="noreferrer"
-          className="block text-[9px] tracking-[0.2em] uppercase text-[#666666] underline pt-2"
+          className="block text-[10px] tracking-[0.2em] uppercase text-[#333333] underline hover:text-[#00A896] transition pt-1 font-medium"
         >
           LUPA PASWORD?
         </a>
       </div>
 
-      <div className="text-center text-white/80 space-y-1 pb-4">
-        <p className="text-[9px] tracking-[0.2em] uppercase">CONTACT INFORMASI</p>
-        <p className="text-xs tracking-wider font-semibold">@CAPSHOESTORY</p>
-        <p className="text-[8px] tracking-widest text-white/60 pt-2">VERSION 1.0</p>
+      {/* FOOTER INFORMASI */}
+      <div className="text-center text-white space-y-2 pb-2">
+        <p className="text-[9px] tracking-[0.25em] uppercase text-white/80 font-medium">
+          CONTACT INFORMASI
+        </p>
+
+        <a
+          href="https://instagram.com/capshoestory"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 text-xs tracking-[0.2em] uppercase font-bold text-white hover:text-white/80 transition"
+        >
+          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+          </svg>
+          <span>@CAPSHOESTORY</span>
+        </a>
+
+        <p className="text-[9px] tracking-[0.2em] uppercase text-white/60 pt-4">
+          VERSION 1.0
+        </p>
       </div>
     </div>
   );
