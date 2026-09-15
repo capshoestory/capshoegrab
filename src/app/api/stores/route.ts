@@ -2,38 +2,37 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
-  const stores = await prisma.store.findMany();
-  return NextResponse.json(stores);
+  try {
+    const stores = await prisma.store.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return NextResponse.json(stores);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const store = await prisma.store.create({
+    const { name, phone, owner, alamat, commissionRate, password, photoUrl, username } = body;
+
+    const newStore = await prisma.store.create({
       data: {
-        name: body.name,
-        commissionRate: parseFloat(body.commissionRate),
-        phone: body.phone,
+        name,
+        phone: phone || '',
+        owner: owner || '',
+        alamat: alamat || '',
+        commissionRate: commissionRate ? Number(commissionRate) : 15.0,
+        password: password || '123456',
+        photoUrl: photoUrl || null,
+        username: username || name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
       },
     });
 
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ADD_STORE',
-          id: store.id.toString(),
-          name: store.name,
-          commissionRate: store.commissionRate,
-          phone: store.phone,
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
-    }
-
-    return NextResponse.json(store);
+    return NextResponse.json(newStore);
   } catch (err: any) {
+    console.error('Error create store:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
@@ -41,61 +40,24 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const store = await prisma.store.update({
-      where: { id: parseInt(body.id) },
+    const { id, name, phone, owner, alamat, commissionRate, password, photoUrl } = body;
+
+    const updatedStore = await prisma.store.update({
+      where: { id: Number(id) },
       data: {
-        name: body.name,
-        commissionRate: parseFloat(body.commissionRate),
-        phone: body.phone,
+        ...(name && { name }),
+        ...(phone && { phone }),
+        ...(owner && { owner }),
+        ...(alamat && { alamat }),
+        ...(commissionRate !== undefined && { commissionRate: Number(commissionRate) }),
+        ...(password && { password }),
+        ...(photoUrl !== undefined && { photoUrl }),
       },
     });
 
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPDATE_STORE',
-          id: store.id.toString(),
-          name: store.name,
-          commissionRate: store.commissionRate,
-          phone: store.phone,
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
-    }
-
-    return NextResponse.json(store);
+    return NextResponse.json(updatedStore);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-
-    if (!id) return NextResponse.json({ error: 'ID dibutuhkan' }, { status: 400 });
-
-    await prisma.store.delete({
-      where: { id: parseInt(id) },
-    });
-
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'DELETE_STORE',
-          id: id,
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
+    console.error('Error update store:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

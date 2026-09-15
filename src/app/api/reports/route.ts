@@ -5,80 +5,73 @@ export async function GET() {
   try {
     const stores = await prisma.store.findMany({
       include: {
+        orders: {
+          where: { status: 'PAID' },
+          include: {
+            items: {
+              include: {
+                product: true,
+              },
+            },
+          },
+        },
         inventories: {
           include: {
             product: true,
           },
         },
-        orders: {
-          where: { status: 'PAID' },
-          include: {
-            items: true,
-          },
-        },
-        withdrawals: {
-          orderBy: { createdAt: 'desc' },
-        },
       },
     });
 
-    const reportData = stores.map((store) => {
-      let totalQty = 0;
+    const reportData = stores.map((store: any) => {
       let totalGrossSales = 0;
-      let totalQrisFee = 0;
       let totalStoreCommission = 0;
-      let totalNetSupplier = 0;
+      let totalQty = 0;
 
-      store.orders.forEach((order) => {
-        totalGrossSales += order.totalAmount;
-        totalQrisFee += order.paymentFee;
-
-        order.items.forEach((item) => {
-          totalQty += 1;
+      store.orders.forEach((order: any) => {
+        order.items.forEach((item: any) => {
+          totalGrossSales += item.price;
           totalStoreCommission += item.storeCommissionAmount;
-          totalNetSupplier += item.netSupplierAmount;
+          totalQty += 1;
         });
       });
 
-      // Total nominal yang sudah ditarik/dicairkan
-      const totalWithdrawn = store.withdrawals.reduce((sum, w) => sum + w.amount, 0);
-      const remainingCommission = totalStoreCommission - totalWithdrawn;
+      const totalStock = store.inventories.reduce(
+        (sum: number, inv: any) => sum + inv.stock,
+        0
+      );
 
-      // Cek sisa stok & reminder limited stock (< 5 pcs)
-      const stockList = store.inventories.map((inv) => ({
+      const stockList = store.inventories.map((inv: any) => ({
         inventoryId: inv.id,
         productId: inv.productId,
         productName: inv.product.name,
         sku: inv.product.sku,
+        category: inv.product.category,
         price: inv.product.price,
         stock: inv.stock,
-        isLowStock: inv.stock < 5,
+        qrCodeKey: inv.qrCodeKey,
       }));
-
-      const lowStockCount = stockList.filter((s) => s.isLowStock).length;
 
       return {
         storeId: store.id,
         storeName: store.name,
-        commissionRate: store.commissionRate,
+        owner: store.owner,
+        alamat: store.alamat,
         phone: store.phone,
-        username: store.username,
+        photoUrl: store.photoUrl,
+        commissionRate: store.commissionRate,
         password: store.password,
-        totalQty,
         totalGrossSales,
-        totalQrisFee,
         totalStoreCommission,
-        totalWithdrawn,
-        remainingCommission,
-        totalNetSupplier,
+        totalQty,
+        totalStock,
         stockList,
-        lowStockCount,
-        withdrawals: store.withdrawals,
       };
     });
 
     return NextResponse.json(reportData);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Gagal mengambil laporan' }, { status: 500 });
+    console.error('Error generating reports:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
