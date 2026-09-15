@@ -45,7 +45,7 @@ model StoreInventory {
   store     Store    @relation(fields: [storeId], references: [id])
   product   Product  @relation(fields: [productId], references: [id])
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([storeId, productId])
 }
