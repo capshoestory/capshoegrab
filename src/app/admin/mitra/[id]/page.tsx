@@ -109,7 +109,7 @@ export default function DetailMitraAdminPage() {
         Memuat Monitoring Mitra...
       </div>
     );
-  }
+  };
 
   // Stock list & filtering
   const stockList = storeData?.stockList || [];
