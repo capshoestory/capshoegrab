@@ -9,6 +9,15 @@ export default function AdminLogin() {
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validasi Password Admin (admin123 atau via API Auth)
+    if (password === 'admin123') {
+      localStorage.setItem('user_role', 'ADMIN');
+      router.push('/admin');
+      return;
+    }
+
+    // Backup pengecekan via Backend API
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -19,7 +28,7 @@ export default function AdminLogin() {
       localStorage.setItem('user_role', 'ADMIN');
       router.push('/admin');
     } else {
-      alert('Password Admin salah!');
+      alert('Password Admin salah! Gunakan: admin123');
     }
   };
 
