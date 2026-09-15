@@ -1,0 +1,77 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Store {
+  id             Int              @id @default(autoincrement())
+  name           String
+  commissionRate Float
+  phone          String
+  username       String           @unique @default("mitra")
+  password       String           @default("123456")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
+  inventories    StoreInventory[]
+  orders         Order[]
+  withdrawals    Withdrawal[]
+}
+
+model Product {
+  id          Int              @id @default(autoincrement())
+  sku         String           @unique
+  name        String
+  price       Float
+  category    String           @default("Umum")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+  inventories StoreInventory[]
+  orderItems  OrderItem[]
+}
+
+model StoreInventory {
+  id         Int      @id @default(autoincrement())
+  storeId    Int
+  productId  Int
+  qrCodeKey  String   @unique
+  stock      Int      @default(0)
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  orderNumber String      @unique
+  storeId     Int
+  totalAmount Float
+  paymentFee  Float
+  status      String      @default("PAID")
+  createdAt   DateTime    @default(now())
+  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id                    Int     @id @default(autoincrement())
+  orderId               Int
+  productId             Int
+  price                 Float
+  storeCommissionRate   Float
+  storeCommissionAmount Float
+  netSupplierAmount     Float
+  order                 Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product               Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Withdrawal {
+  id          Int      @id @default(autoincrement())
+  storeId     Int
+  amount      Float
+  proofUrl    String?
+  createdAt   DateTime @default(now())
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+}
