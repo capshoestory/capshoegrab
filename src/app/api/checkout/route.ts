@@ -12,7 +12,10 @@ export async function POST(req: Request) {
     });
 
     if (!inventory || inventory.stock <= 0) {
-      return NextResponse.json({ error: 'Barang tidak ditemukan atau stok habis' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Produk tidak ditemukan atau stok habis di toko ini.' },
+        { status: 400 }
+      );
     }
 
     const price = inventory.product.price;
@@ -22,22 +25,19 @@ export async function POST(req: Request) {
     const netSupplierAmount = price - paymentFee - storeCommissionAmount;
     const orderNumber = `INV-${Date.now()}`;
 
-    // 1. Buat Bill Pembayaran via Flip Payment Gateway
-    let paymentUrl = '';
-    try {
-      const flipBill = await createFlipBill({
-        title: `Pembelian ${inventory.product.name} - ${inventory.store.name}`,
-        amount: price,
-        type: 'SINGLE',
-        redirectUrl: `http://localhost:3000/checkout/success?order=${orderNumber}`,
-      });
-      paymentUrl = flipBill.link_url;
-    } catch (err) {
-      console.warn('Flip API Sandbox Mode Fallback:', err);
-    }
+    // Base URL Domain Publik Vercel
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://capshoegrab.vercel.app';
 
-    // 2. Buat Record Transaksi PENDING (Menunggu Pembayaran Flip)
-    const order = await prisma.order.create({
+    // Buat Tagihan Langsung ke Flip.id
+    const flipBill = await createFlipBill({
+      title: `${inventory.product.name} - ${inventory.store.name}`,
+      amount: price,
+      type: 'SINGLE',
+      redirectUrl: `${baseUrl}/checkout/success?order=${orderNumber}`,
+    });
+
+    // Simpan Transaksi Pending
+    await prisma.order.create({
       data: {
         orderNumber: orderNumber,
         storeId: inventory.storeId,
@@ -58,10 +58,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      order,
-      paymentUrl: paymentUrl || `http://localhost:3000/checkout/success?order=${orderNumber}`,
+      paymentUrl: flipBill.link_url, // URL Halaman Pembayaran Flip.id
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Gagal memproses transaksi' }, { status: 500 });
+    console.error('Error Checkout Flip:', err);
+    return NextResponse.json({ error: err.message || 'Gagal membuat tagihan pembayaran' }, { status: 500 });
   }
 }

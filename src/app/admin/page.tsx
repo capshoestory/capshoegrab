@@ -42,7 +42,6 @@ export default function AdminDashboard() {
   const [addStockQty, setAddStockQty] = useState('5');
 
   // State Modal QR Code
-  const [qrModalData, setQrModalData] = useState<any>(null);
 
   const fetchReports = async () => {
     const res = await fetch('/api/reports');
@@ -232,7 +231,6 @@ export default function AdminDashboard() {
   };
 
   // HANDLER CREATE QR CODE BARANG
-  const handleCreateQR = async (productId: number) => {
     const res = await fetch('/api/inventory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

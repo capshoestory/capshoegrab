@@ -85,7 +85,6 @@ export default function DetailMitraAdminPage() {
   };
 
   // HANDLER CREATE / GENERATE QR CODE BARANG
-  const handleCreateQR = async (productId: number) => {
     const res = await fetch('/api/inventory', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

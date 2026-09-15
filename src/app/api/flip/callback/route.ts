@@ -59,22 +59,7 @@ export async function POST(req: Request) {
           await sendWhatsAppMessage(adminPhone, partnerMessage);
 
           // 4. Log ke Google Sheets
-          const sheetsWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-          if (sheetsWebhookUrl) {
-            fetch(sheetsWebhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                orderNumber: order.orderNumber,
-                storeName: order.store.name,
-                productName: item.product.name,
-                totalAmount: order.totalAmount,
-                paymentFee: order.paymentFee,
-                storeCommission: item.storeCommissionAmount,
-                netSupplier: item.netSupplierAmount,
-              }),
-            }).catch((err) => console.error('Gagal log Sheets:', err));
-          }
+          
         }
       }
     }
