@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// GET ALL STORES DARI SUPABASE
 export async function GET() {
   try {
     const stores = await prisma.store.findMany({
       orderBy: { createdAt: 'desc' },
+      include: {
+        inventories: {
+          include: { product: true }
+        }
+      }
     });
     return NextResponse.json(stores);
   } catch (err: any) {
@@ -12,6 +18,7 @@ export async function GET() {
   }
 }
 
+// SIMPAN MITRA BARU KE SUPABASE
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -32,32 +39,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(newStore);
   } catch (err: any) {
-    console.error('Error create store:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    const { id, name, phone, owner, alamat, commissionRate, password, photoUrl } = body;
-
-    const updatedStore = await prisma.store.update({
-      where: { id: Number(id) },
-      data: {
-        ...(name && { name }),
-        ...(phone && { phone }),
-        ...(owner && { owner }),
-        ...(alamat && { alamat }),
-        ...(commissionRate !== undefined && { commissionRate: Number(commissionRate) }),
-        ...(password && { password }),
-        ...(photoUrl !== undefined && { photoUrl }),
-      },
-    });
-
-    return NextResponse.json(updatedStore);
-  } catch (err: any) {
-    console.error('Error update store:', err);
+    console.error('Error insert to Supabase:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

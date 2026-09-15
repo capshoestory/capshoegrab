@@ -1,102 +1,50 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// GET ALL PRODUCTS DARI SUPABASE
 export async function GET() {
-  const products = await prisma.product.findMany();
-  return NextResponse.json(products);
+  try {
+    const products = await prisma.product.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return NextResponse.json(products);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
 
+// SIMPAN PRODUK BARU KE SUPABASE
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const product = await prisma.product.create({
+    const { sku, name, category, price, photoUrl } = body;
+
+    const newProduct = await prisma.product.create({
       data: {
-        sku: body.sku,
-        name: body.name,
-        price: parseFloat(body.price),
+        sku,
+        name,
+        category: category || 'TOPI',
+        price: parseFloat(price),
+        photoUrl: photoUrl || null,
       },
     });
 
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'ADD_PRODUCT',
-          sku: product.sku,
-          name: product.name,
-          price: product.price,
-          category: body.category || 'Umum',
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
+    // Otomatis alokasikan inventoris ke seluruh toko mitra yang ada di Supabase
+    const allStores = await prisma.store.findMany();
+    for (const store of allStores) {
+      await prisma.storeInventory.create({
+        data: {
+          storeId: store.id,
+          productId: newProduct.id,
+          stock: 10, // Default stok awal
+          qrCodeKey: `QR-${store.id}-${newProduct.id}-${Date.now()}`,
+        },
+      });
     }
 
-    return NextResponse.json(product);
+    return NextResponse.json(newProduct);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    const product = await prisma.product.update({
-      where: { id: parseInt(body.id) },
-      data: {
-        sku: body.sku,
-        name: body.name,
-        price: parseFloat(body.price),
-      },
-    });
-
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'UPDATE_PRODUCT',
-          sku: product.sku,
-          name: product.name,
-          price: product.price,
-          category: body.category || 'Umum',
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
-    }
-
-    return NextResponse.json(product);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function DELETE(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    const sku = searchParams.get('sku');
-
-    if (!id) return NextResponse.json({ error: 'ID dibutuhkan' }, { status: 400 });
-
-    await prisma.product.delete({
-      where: { id: parseInt(id) },
-    });
-
-    const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
-    if (webhookUrl && sku) {
-      fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'DELETE_PRODUCT',
-          sku: sku,
-        }),
-      }).catch((err) => console.error('Gagal sync Google Sheets:', err));
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
+    console.error('Error insert product to Supabase:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
