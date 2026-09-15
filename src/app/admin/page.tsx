@@ -19,7 +19,20 @@ export default function AdminDashboardPage() {
   const [fee, setFee] = useState('15');
   const [pasword, setPasword] = useState('123456');
   const [photoBase64, setPhotoBase64] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Form State Tambah Stock
+  const [sku, setSku] = useState('');
+  const [productName, setProductName] = useState('');
+  const [category, setCategory] = useState('TOPI');
+  const [price, setPrice] = useState('');
+  const [productPhoto, setProductPhoto] = useState('');
+
+  // Selected Mitra untuk Tab Mitra
+  const [selectedMitraId, setSelectedMitraId] = useState<string>('');
+  const [qrModalData, setQrModalData] = useState<any>(null);
+
+  // FETCH ALL DATA (REAL-TIME REFRESH)
   const fetchData = async () => {
     try {
       const [resR, resP, resS] = await Promise.all([
@@ -30,12 +43,17 @@ export default function AdminDashboardPage() {
 
       if (resR.ok) {
         const dataR = await resR.json();
-        // Urutkan mitra berdasarkan total penjualan tertinggi ke terendah
         dataR.sort((a: any, b: any) => b.totalQty - a.totalQty);
         setReports(dataR);
+        if (dataR.length > 0 && !selectedMitraId) {
+          setSelectedMitraId(dataR[0].storeId.toString());
+        }
       }
       if (resP.ok) setProducts(await resP.json());
-      if (resS.ok) setStores(await resS.json());
+      if (resS.ok) {
+        const dataS = await resS.json();
+        setStores(dataS);
+      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     }
@@ -46,7 +64,7 @@ export default function AdminDashboardPage() {
   }, []);
 
   // Upload Photo Auto Compress (200x200)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setTarget: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -63,7 +81,7 @@ export default function AdminDashboardPage() {
           const sx = (img.width - minDim) / 2;
           const sy = (img.height - minDim) / 2;
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 200, 200);
-          setPhotoBase64(canvas.toDataURL('image/webp', 0.8));
+          setTarget(canvas.toDataURL('image/webp', 0.8));
         }
       };
       img.src = event.target?.result as string;
@@ -71,33 +89,119 @@ export default function AdminDashboardPage() {
     reader.readAsDataURL(file);
   };
 
+  // HANDLER SUBMIT TAMBAH MITRA (AUTO REFRESH + GOOGLE SHEETS SYNC)
   const handleAddMitra = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/stores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: namaToko,
-        phone: kontak,
-        owner,
-        alamat,
-        commissionRate: parseFloat(fee),
-        password: pasword,
-        photoUrl: photoBase64,
-        username: namaToko.toLowerCase().replace(/\s+/g, '_'),
-      }),
-    });
+    setIsSubmitting(true);
 
-    if (res.ok) {
-      alert('Mitra Berhasil Ditambahkan!');
-      setNamaToko(''); setOwner(''); setAlamat(''); setKontak(''); setPhotoBase64('');
-      fetchData();
-    } else {
-      alert('Gagal menambah mitra');
+    try {
+      const res = await fetch('/api/stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: namaToko,
+          phone: kontak,
+          owner,
+          alamat,
+          commissionRate: parseFloat(fee),
+          password: pasword,
+          photoUrl: photoBase64,
+          username: namaToko.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
+        }),
+      });
+
+      if (res.ok) {
+        const newStore = await res.json();
+        
+        // SYNC AUTOMATICALLY TO GOOGLE SHEETS WEBHOOK
+        const sheetsUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
+        if (sheetsUrl) {
+          fetch(sheetsUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ADD_MITRA', ...newStore }),
+          }).catch(console.error);
+        }
+
+        alert('Mitra Berhasil Ditambahkan & Tersinkron!');
+        setNamaToko(''); setOwner(''); setAlamat(''); setKontak(''); setPhotoBase64('');
+        
+        // INSTANT REFRESH LISTING DAFTAR MITRA
+        await fetchData();
+      } else {
+        alert('Gagal menambah mitra.');
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Akumulasi Metrik
+  // HANDLER SUBMIT TAMBAH STOK
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sku,
+          name: productName,
+          category,
+          price: parseFloat(price),
+          photoUrl: productPhoto,
+        }),
+      });
+
+      if (res.ok) {
+        const newProduct = await res.json();
+
+        // SYNC TO GOOGLE SHEETS
+        const sheetsUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
+        if (sheetsUrl) {
+          fetch(sheetsUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ADD_PRODUCT', ...newProduct }),
+          }).catch(console.error);
+        }
+
+        alert('Stok Produk Berhasil Ditambahkan!');
+        setSku(''); setProductName(''); setPrice(''); setProductPhoto('');
+        await fetchData();
+      } else {
+        alert('Gagal menambah stok produk.');
+      }
+    } catch (err: any) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // HANDLER CREATE UNIQUE QR
+  const handleCreateQR = async (productId: number) => {
+    if (!selectedMitraId) return alert('Pilih Toko Mitra terlebih dahulu!');
+    const res = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: selectedMitraId, productId, stockToAdd: 0 }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      setQrModalData(data);
+    } else {
+      alert('Gagal membuat QR Tag: ' + data.error);
+    }
+  };
+
+  // METRIK AKUMULASI
   const totalMitraCount = stores.length || reports.length;
   const totalVarianCount = products.length;
   const totalTerjualBulanIni = reports.reduce((sum, r) => sum + (r.totalQty || 0), 0);
@@ -108,6 +212,8 @@ export default function AdminDashboardPage() {
 
   const totalPenjualanRp = reports.reduce((sum, r) => sum + (r.totalGrossSales || 0), 0);
   const totalShareProfitRp = reports.reduce((sum, r) => sum + (r.totalStoreCommission || 0), 0);
+
+  const activeMitraData = reports.find((r) => r.storeId.toString() === selectedMitraId) || reports[0];
 
   return (
     <div className="min-h-screen bg-[#EFECE6] text-[#333333] font-sans antialiased pb-20">
@@ -133,44 +239,24 @@ export default function AdminDashboardPage() {
       {/* NAVIGATION TABS */}
       <div className="bg-[#D8D4CA] border-b border-[#C8C4B8] px-4">
         <div className="max-w-xl mx-auto flex justify-center gap-1 pt-2">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
-              activeTab === 'dashboard'
-                ? 'bg-[#EFECE6] text-[#333333]'
-                : 'bg-[#00A896] text-white'
-            }`}
-          >
-            DASHBOARD
-          </button>
-          <button
-            onClick={() => setActiveTab('stock')}
-            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
-              activeTab === 'stock'
-                ? 'bg-[#EFECE6] text-[#333333]'
-                : 'bg-[#00A896] text-white'
-            }`}
-          >
-            STOCK
-          </button>
-          <button
-            onClick={() => setActiveTab('mitra')}
-            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
-              activeTab === 'mitra'
-                ? 'bg-[#EFECE6] text-[#333333]'
-                : 'bg-[#00A896] text-white'
-            }`}
-          >
-            MITRA
-          </button>
+          {['dashboard', 'stock', 'mitra'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab as any)}
+              className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+                activeTab === tab ? 'bg-[#EFECE6] text-[#333333]' : 'bg-[#00A896] text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* MAIN CONTENT AREA */}
       <main className="max-w-xl mx-auto px-4 pt-6 space-y-8">
+        {/* ================= TAB 1: DASHBOARD ================= */}
         {activeTab === 'dashboard' && (
           <>
-            {/* WELCOME TITLE */}
             <div className="text-center">
               <h2 className="text-xs font-bold tracking-[0.2em] uppercase text-[#555555]">
                 SELAMAT DATANG DI HALAMAN<br />DASHBOARD MITRA.
@@ -180,30 +266,19 @@ export default function AdminDashboardPage() {
             {/* 4 TOP METRIC CARDS */}
             <div className="grid grid-cols-4 gap-2 text-center">
               <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
-                  JUMLAH MITRA
-                </p>
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">JUMLAH MITRA</p>
                 <p className="text-2xl font-normal text-[#333333] font-serif">{totalMitraCount}</p>
               </div>
-
               <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
-                  TOTAL VARIAN PRODUK
-                </p>
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">TOTAL VARIAN PRODUK</p>
                 <p className="text-2xl font-normal text-[#333333] font-serif">{totalVarianCount}</p>
               </div>
-
               <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
-                  TERJUAL BULAN INI
-                </p>
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">TERJUAL BULAN INI</p>
                 <p className="text-2xl font-normal text-[#333333] font-serif">{totalTerjualBulanIni}</p>
               </div>
-
               <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
-                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
-                  REMINDER LIMITED STOCK
-                </p>
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">REMINDER LIMITED STOCK</p>
                 <p className="text-2xl font-normal text-[#333333] font-serif">{totalLimitedStock}</p>
               </div>
             </div>
@@ -211,18 +286,13 @@ export default function AdminDashboardPage() {
             {/* 2 TOTAL SUMMARY CARDS */}
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
-                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">
-                  TOTAL PENJUALAN BULAN INI
-                </p>
+                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">TOTAL PENJUALAN BULAN INI</p>
                 <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
                   IDR. {totalPenjualanRp.toLocaleString('id-ID')}
                 </p>
               </div>
-
               <div>
-                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">
-                  TOTAL SHARE PROFIT
-                </p>
+                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">TOTAL SHARE PROFIT</p>
                 <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
                   IDR. {totalShareProfitRp.toLocaleString('id-ID')}
                 </p>
@@ -231,7 +301,7 @@ export default function AdminDashboardPage() {
 
             <hr className="border-t-2 border-[#8E7CC3] my-4" />
 
-            {/* SECTION DAFTAR MITRA */}
+            {/* DAFTAR MITRA (REAL-TIME UPDATED) */}
             <div className="space-y-4">
               <h3 className="text-center text-sm font-bold tracking-[0.25em] uppercase text-[#333333]">
                 DAFTAR MITRA
@@ -239,22 +309,16 @@ export default function AdminDashboardPage() {
 
               {reports.map((item) => (
                 <div key={item.storeId} className="border border-[#CCCCCC] bg-[#EFECE6] p-3 flex gap-3 items-center shadow-2xs">
-                  {/* Photo Toko */}
                   <img
                     src={item.photoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200'}
                     alt={item.storeName}
                     className="w-20 h-20 object-cover border border-[#CCCCCC]"
                   />
 
-                  {/* Info Toko & Metrics */}
                   <div className="flex-1 space-y-2">
                     <div>
-                      <h4 className="font-bold text-xs tracking-wider uppercase text-[#333333]">
-                        {item.storeName}
-                      </h4>
-                      <p className="text-[9px] uppercase tracking-wider text-[#666666]">
-                        {item.alamat || 'KOPANG'}
-                      </p>
+                      <h4 className="font-bold text-xs tracking-wider uppercase text-[#333333]">{item.storeName}</h4>
+                      <p className="text-[9px] uppercase tracking-wider text-[#666666]">{item.alamat || 'MANTANG'}</p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-1 text-center">
@@ -273,7 +337,6 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Profit & Action Buttons */}
                   <div className="w-24 text-right space-y-1.5">
                     <div>
                       <p className="text-[7px] font-bold uppercase text-[#777777]">PROFIT</p>
@@ -285,14 +348,17 @@ export default function AdminDashboardPage() {
                     <button
                       type="button"
                       onClick={() => window.open(`https://wa.me/${(item.phone || '').replace(/[^0-9]/g, '')}`, '_blank')}
-                      className="w-full bg-[#E5E0D8] hover:bg-[#D8D4CA] text-[#333333] py-1 text-[8px] font-bold uppercase tracking-wider border border-[#CCCCCC]"
+                      className="w-full bg-[#E5E0D8] text-[#333333] py-1 text-[8px] font-bold uppercase tracking-wider border border-[#CCCCCC]"
                     >
                       INBOX
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setActiveTab('mitra')}
+                      onClick={() => {
+                        setSelectedMitraId(item.storeId.toString());
+                        setActiveTab('mitra');
+                      }}
                       className="w-full bg-[#8D5B4C] hover:bg-[#7A4E41] text-white py-1 text-[8px] font-bold uppercase tracking-wider"
                     >
                       EDIT INFO
@@ -304,7 +370,7 @@ export default function AdminDashboardPage() {
 
             <hr className="border-t-2 border-[#8E7CC3] my-4" />
 
-            {/* SECTION TAMBAH MITRA */}
+            {/* FORM TAMBAH MITRA (AUTO REFRESH + SYNC) */}
             <div className="bg-[#C8C4B8] border border-[#B8B4A8] p-4 space-y-4">
               <h3 className="text-center text-xs font-bold tracking-[0.25em] uppercase text-[#333333]">
                 TAMBAH MITRA
@@ -312,7 +378,6 @@ export default function AdminDashboardPage() {
 
               <form onSubmit={handleAddMitra} className="space-y-3">
                 <div className="flex gap-3 items-center">
-                  {/* UPLOAD PHOTO BUTTON */}
                   <label className="w-24 h-20 bg-[#00A896] text-white flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:bg-[#008D7D] transition">
                     <span className="text-[8px] font-bold tracking-wider uppercase leading-tight">
                       UPLOAD PHOTO HERE
@@ -320,12 +385,11 @@ export default function AdminDashboardPage() {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handlePhotoUpload}
+                      onChange={(e) => handlePhotoUpload(e, setPhotoBase64)}
                       className="hidden"
                     />
                   </label>
 
-                  {/* INPUT FIELDS GRID */}
                   <div className="flex-1 grid grid-cols-2 gap-2 text-[9px] font-bold uppercase">
                     <div className="flex items-center gap-1">
                       <span className="w-16">NAMA TOKO</span>
@@ -337,7 +401,6 @@ export default function AdminDashboardPage() {
                         className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
                       />
                     </div>
-
                     <div className="flex items-center gap-1">
                       <span className="w-16">KONTAK</span>
                       <input
@@ -348,7 +411,6 @@ export default function AdminDashboardPage() {
                         className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
                       />
                     </div>
-
                     <div className="flex items-center gap-1">
                       <span className="w-16">OWNER</span>
                       <input
@@ -359,7 +421,6 @@ export default function AdminDashboardPage() {
                         className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
                       />
                     </div>
-
                     <div className="flex items-center gap-1">
                       <span className="w-16">FEE (%)</span>
                       <input
@@ -370,7 +431,6 @@ export default function AdminDashboardPage() {
                         className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
                       />
                     </div>
-
                     <div className="flex items-center gap-1">
                       <span className="w-16">ALAMAT</span>
                       <input
@@ -381,7 +441,6 @@ export default function AdminDashboardPage() {
                         className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
                       />
                     </div>
-
                     <div className="flex items-center gap-1">
                       <span className="w-16">PASWORD</span>
                       <input
@@ -395,13 +454,13 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                {/* SUBMIT BUTTON */}
                 <div className="text-center pt-2">
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className="bg-[#8D5B4C] hover:bg-[#7A4E41] text-white px-8 py-2 text-xs font-bold tracking-[0.2em] uppercase transition"
                   >
-                    SUBMIT
+                    {isSubmitting ? 'MENYIMPAN...' : 'SUBMIT'}
                   </button>
                 </div>
               </form>
@@ -409,22 +468,116 @@ export default function AdminDashboardPage() {
           </>
         )}
 
-        {/* TAB STOCK */}
+        {/* ================= TAB 2: STOCK ================= */}
         {activeTab === 'stock' && (
-          <div className="space-y-4 text-center py-10">
-            <h3 className="font-serif font-bold uppercase tracking-widest text-sm">HALAMAN STOCK</h3>
-            <p className="text-xs text-[#666666]">Silakan kelola stok produk pada tab ini.</p>
+          <div className="space-y-6">
+            <div className="bg-white p-4 border border-[#CCCCCC] space-y-4">
+              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">INPUT STOCK BARU</h3>
+              <form onSubmit={handleAddProduct} className="grid grid-cols-2 gap-3 text-xs font-bold uppercase">
+                <input
+                  type="text"
+                  placeholder="SKU (Contoh: TOP-01)"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  required
+                  className="p-2 border"
+                />
+                <input
+                  type="text"
+                  placeholder="NAMA PRODUK"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  required
+                  className="p-2 border"
+                />
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="p-2 border">
+                  <option value="TOPI">TOPI</option>
+                  <option value="PAKAIAN">PAKAIAN</option>
+                  <option value="AKSESORIS">AKSESORIS</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="HARGA (IDR)"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  required
+                  className="p-2 border"
+                />
+                <div className="col-span-2">
+                  <label className="text-[10px]">Upload Foto Produk (Auto 200x200):</label>
+                  <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, setProductPhoto)} className="w-full p-2 border mt-1" />
+                </div>
+                <button type="submit" disabled={isSubmitting} className="col-span-2 bg-[#8D5B4C] text-white py-2 font-bold uppercase">
+                  {isSubmitting ? 'MENYIMPAN...' : 'SUBMIT STOK'}
+                </button>
+              </form>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">LIST STOK KESELURUHAN</h3>
+              {products.map((p) => (
+                <div key={p.id} className="border bg-white p-3 flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-xs">{p.name} ({p.sku})</h4>
+                    <p className="text-[10px] text-gray-500">Kategori: {p.category} | IDR {p.price?.toLocaleString('id-ID')}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* TAB MITRA */}
+        {/* ================= TAB 3: MITRA ================= */}
         {activeTab === 'mitra' && (
-          <div className="space-y-4 text-center py-10">
-            <h3 className="font-serif font-bold uppercase tracking-widest text-sm">HALAMAN MITRA</h3>
-            <p className="text-xs text-[#666666]">Silakan monitor detail mitra dan kelola QR Code unik.</p>
+          <div className="space-y-6">
+            <div className="bg-white p-4 border border-[#CCCCCC] space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase">PILIH NAMA TOKO: </label>
+                <select
+                  value={selectedMitraId}
+                  onChange={(e) => setSelectedMitraId(e.target.value)}
+                  className="p-2 border font-bold text-xs uppercase"
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-center text-xs font-bold tracking-[0.2em] uppercase">STOK TOKO TERPILIH</h3>
+              {activeMitraData?.stockList?.map((item: any) => (
+                <div key={item.inventoryId} className="border bg-white p-3 flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-xs">{item.productName}</h4>
+                    <p className="text-[10px] text-gray-500">Stok Toko: {item.stock} pcs | IDR {item.price?.toLocaleString('id-ID')}</p>
+                  </div>
+                  <button
+                    onClick={() => handleCreateQR(item.productId)}
+                    className="bg-[#8D5B4C] text-white px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest"
+                  >
+                    CREATE QR
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </main>
+
+      {/* MODAL QR PAYMENT DISPLAY */}
+      {qrModalData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-6 max-w-sm w-full text-center space-y-4 rounded shadow-2xl">
+            <h3 className="font-bold uppercase text-sm tracking-widest text-[#00A896]">QR PAYMENT UNIK (FLIP.ID)</h3>
+            <img src={qrModalData.qrImageDataUrl} alt="QR Code" className="w-48 h-48 mx-auto border p-2" />
+            <button onClick={() => setQrModalData(null)} className="w-full bg-gray-200 py-2 text-xs font-bold uppercase">
+              TUTUP
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
