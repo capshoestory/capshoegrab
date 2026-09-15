@@ -3,73 +3,50 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function AdminDashboard() {
+export default function AdminDashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'mitra'>('dashboard');
 
-  // Data States
   const [reports, setReports] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
 
-  // Form Tambah Mitra Baru
-  const [newStoreName, setNewStoreName] = useState('');
-  const [newOwner, setNewOwner] = useState('');
-  const [newAlamat, setNewAlamat] = useState('');
-  const [newKontak, setNewKontak] = useState('');
-  const [newFee, setNewFee] = useState('15');
-  const [newPassword, setNewPassword] = useState('123456');
-  const [newPhotoBase64, setNewPhotoBase64] = useState('');
-
-  // Selected Mitra di Tab Mitra
-  const [selectedMitraId, setSelectedMitraId] = useState<string>('');
-  const [mitraPassword, setMitraPassword] = useState('');
-  const [mitraFee, setMitraFee] = useState('15');
-
-  // State Form Stock
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [sku, setSku] = useState('');
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('TOPI');
-  const [price, setPrice] = useState('');
-  const [stock, setStock] = useState('10');
-  const [productPhoto, setProductPhoto] = useState('');
-
-  // Modal QR
-  const [qrModalData, setQrModalData] = useState<any>(null);
+  // Form State Tambah Mitra
+  const [namaToko, setNamaToko] = useState('');
+  const [owner, setOwner] = useState('');
+  const [alamat, setAlamat] = useState('');
+  const [kontak, setKontak] = useState('');
+  const [fee, setFee] = useState('15');
+  const [pasword, setPasword] = useState('123456');
+  const [photoBase64, setPhotoBase64] = useState('');
 
   const fetchData = async () => {
-    const [resR, resP, resS] = await Promise.all([
-      fetch('/api/reports'),
-      fetch('/api/products'),
-      fetch('/api/stores'),
-    ]);
-    if (resR.ok) {
-      const dataR = await resR.json();
-      // Urutkan Mitra berdasarkan Total Penjualan Tertinggi ke Rendah
-      dataR.sort((a: any, b: any) => b.totalQty - a.totalQty);
-      setReports(dataR);
-      if (dataR.length > 0 && !selectedMitraId) setSelectedMitraId(dataR[0].storeId.toString());
+    try {
+      const [resR, resP, resS] = await Promise.all([
+        fetch('/api/reports'),
+        fetch('/api/products'),
+        fetch('/api/stores'),
+      ]);
+
+      if (resR.ok) {
+        const dataR = await resR.json();
+        // Urutkan mitra berdasarkan total penjualan tertinggi ke terendah
+        dataR.sort((a: any, b: any) => b.totalQty - a.totalQty);
+        setReports(dataR);
+      }
+      if (resP.ok) setProducts(await resP.json());
+      if (resS.ok) setStores(await resS.json());
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
     }
-    if (resP.ok) setProducts(await resP.json());
-    if (resS.ok) setStores(await resS.json());
   };
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Update password/fee mitra saat dropdown berubah
-  useEffect(() => {
-    const currentStore = stores.find((s) => s.id.toString() === selectedMitraId);
-    if (currentStore) {
-      setMitraPassword(currentStore.password || '123456');
-      setMitraFee((currentStore.commissionRate || 15).toString());
-    }
-  }, [selectedMitraId, stores]);
-
-  // FUNGSI COMPRESS PHOTO CLIENT-SIDE (200x200 PX)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (base64: string) => void) => {
+  // Upload Photo Auto Compress (200x200)
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -86,7 +63,7 @@ export default function AdminDashboard() {
           const sx = (img.width - minDim) / 2;
           const sy = (img.height - minDim) / 2;
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 200, 200);
-          callback(canvas.toDataURL('image/webp', 0.8));
+          setPhotoBase64(canvas.toDataURL('image/webp', 0.8));
         }
       };
       img.src = event.target?.result as string;
@@ -94,309 +71,360 @@ export default function AdminDashboard() {
     reader.readAsDataURL(file);
   };
 
-  // HANDLER TAMBAH MITRA
-  const handleAddStore = async (e: React.FormEvent) => {
+  const handleAddMitra = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch('/api/stores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: newStoreName,
-        phone: newKontak,
-        owner: newOwner,
-        alamat: newAlamat,
-        commissionRate: parseFloat(newFee),
-        password: newPassword,
-        photoUrl: newPhotoBase64,
-        username: newStoreName.toLowerCase().replace(/\s+/g, '_'),
+        name: namaToko,
+        phone: kontak,
+        owner,
+        alamat,
+        commissionRate: parseFloat(fee),
+        password: pasword,
+        photoUrl: photoBase64,
+        username: namaToko.toLowerCase().replace(/\s+/g, '_'),
       }),
     });
 
     if (res.ok) {
-      alert('Toko Mitra Berhasil Ditambahkan!');
-      setNewStoreName(''); setNewOwner(''); setNewAlamat(''); setNewKontak(''); setNewPhotoBase64('');
+      alert('Mitra Berhasil Ditambahkan!');
+      setNamaToko(''); setOwner(''); setAlamat(''); setKontak(''); setPhotoBase64('');
       fetchData();
-    }
-  };
-
-  // HANDLER UPDATE PASSWORD MITRA + WA NOTIF
-  const handleUpdateMitraPassword = async () => {
-    if (!confirm(`Apakah Anda yakin ingin merubah Password toko mitra ini menjadi "${mitraPassword}"?`)) return;
-
-    const currentStore = stores.find((s) => s.id.toString() === selectedMitraId);
-    const res = await fetch('/api/stores', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: Number(selectedMitraId),
-        password: mitraPassword,
-        commissionRate: parseFloat(mitraFee),
-      }),
-    });
-
-    if (res.ok && currentStore) {
-      // Direct WA ke Mitra untuk pemberitahuan perubahan password
-      const waMsg = `Halo ${currentStore.name}, Password akun dashboard mitra Anda telah diperbarui menjadi: ${mitraPassword}`;
-      window.open(`https://wa.me/${currentStore.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waMsg)}`, '_blank');
-      alert('Data Mitra dan Password berhasil diperbarui!');
-      fetchData();
-    }
-  };
-
-  // HANDLER CREATE UNIQUE QR CODE FOR FLIP PAYMENT
-  const handleCreateQR = async (productId: number) => {
-    const res = await fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        storeId: selectedMitraId,
-        productId: productId,
-        stockToAdd: 0,
-      }),
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      setQrModalData(data);
     } else {
-      alert('Gagal membuat QR Tag: ' + data.error);
+      alert('Gagal menambah mitra');
     }
   };
 
-  const totalSalesMonth = reports.reduce((sum, r) => sum + r.totalGrossSales, 0);
-  const totalShareProfit = reports.reduce((sum, r) => sum + r.totalStoreCommission, 0);
-  const activeMitra = reports.find((r) => r.storeId.toString() === selectedMitraId) || reports[0];
+  // Akumulasi Metrik
+  const totalMitraCount = stores.length || reports.length;
+  const totalVarianCount = products.length;
+  const totalTerjualBulanIni = reports.reduce((sum, r) => sum + (r.totalQty || 0), 0);
+  const totalLimitedStock = reports.reduce((sum, r) => {
+    const lowItems = r.stockList?.filter((i: any) => i.stock < 5).length || 0;
+    return sum + lowItems;
+  }, 0);
+
+  const totalPenjualanRp = reports.reduce((sum, r) => sum + (r.totalGrossSales || 0), 0);
+  const totalShareProfitRp = reports.reduce((sum, r) => sum + (r.totalStoreCommission || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#ECE9E2] text-[#4A4741] font-sans antialiased pb-20">
+    <div className="min-h-screen bg-[#EFECE6] text-[#333333] font-sans antialiased pb-20">
       {/* HEADER LOGO CAPSHOE & LOGOUT */}
-      <header className="bg-[#C2C5B4] px-6 py-4 border-b border-[#B0B3A2] flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#00A896] text-white px-3 py-1 font-bold rounded">Capshoe</div>
-          <span className="text-xs uppercase tracking-widest text-[#4A4741]">Adventure Story</span>
+      <header className="bg-[#D8D4CA] px-6 py-4 border-b border-[#C8C4B8] flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <div className="text-[#00A896] text-xl font-black font-serif">Capshoe</div>
+          <span className="text-[9px] uppercase tracking-[0.25em] text-[#666666] font-medium pt-1">
+            ADVENTURE STORY
+          </span>
         </div>
-        <button onClick={() => router.push('/')} className="text-xs tracking-widest uppercase font-bold text-[#686356]">
+        <button
+          onClick={() => {
+            localStorage.clear();
+            router.push('/');
+          }}
+          className="text-xs tracking-[0.2em] uppercase font-bold text-[#666666] hover:text-black"
+        >
           LOG OUT
         </button>
       </header>
 
-      {/* TABS NAVIGATION */}
-      <div className="bg-[#C2C5B4] border-b border-[#B0B3A2] px-6">
-        <div className="max-w-4xl mx-auto flex justify-center gap-2 pt-2">
-          {['dashboard', 'stock', 'mitra'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`px-8 py-3 text-xs uppercase tracking-widest font-bold transition rounded-t-md ${
-                activeTab === tab ? 'bg-[#00A896] text-white' : 'text-[#686356] hover:bg-[#B0B3A2]'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+      {/* NAVIGATION TABS */}
+      <div className="bg-[#D8D4CA] border-b border-[#C8C4B8] px-4">
+        <div className="max-w-xl mx-auto flex justify-center gap-1 pt-2">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'dashboard'
+                ? 'bg-[#EFECE6] text-[#333333]'
+                : 'bg-[#00A896] text-white'
+            }`}
+          >
+            DASHBOARD
+          </button>
+          <button
+            onClick={() => setActiveTab('stock')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'stock'
+                ? 'bg-[#EFECE6] text-[#333333]'
+                : 'bg-[#00A896] text-white'
+            }`}
+          >
+            STOCK
+          </button>
+          <button
+            onClick={() => setActiveTab('mitra')}
+            className={`flex-1 py-2 text-xs uppercase tracking-[0.2em] font-bold ${
+              activeTab === 'mitra'
+                ? 'bg-[#EFECE6] text-[#333333]'
+                : 'bg-[#00A896] text-white'
+            }`}
+          >
+            MITRA
+          </button>
         </div>
       </div>
 
-      <main className="max-w-4xl mx-auto px-4 pt-8 space-y-10">
-        {/* TAB 1: DASHBOARD UTAMA ADMIN */}
+      {/* MAIN CONTENT AREA */}
+      <main className="max-w-xl mx-auto px-4 pt-6 space-y-8">
         {activeTab === 'dashboard' && (
-          <div className="space-y-8">
+          <>
+            {/* WELCOME TITLE */}
             <div className="text-center">
-              <h2 className="font-serif text-sm tracking-widest uppercase font-bold text-[#4A4741]">
-                SELAMAT DATANG DI HALAMAN DASHBOARD MITRA.
+              <h2 className="text-xs font-bold tracking-[0.2em] uppercase text-[#555555]">
+                SELAMAT DATANG DI HALAMAN<br />DASHBOARD MITRA.
               </h2>
             </div>
 
-            {/* AKUMULASI PENJUALAN & TOTAL SHARE PROFIT */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="border border-[#B3AE9F] bg-[#ECE9E2] p-4 text-center">
-                <p className="text-[10px] uppercase text-[#736E60] font-bold">TOTAL PENJUALAN BULAN INI</p>
-                <p className="font-serif text-2xl font-bold text-[#00A896] mt-2">
-                  IDR. {totalSalesMonth.toLocaleString('id-ID')}
+            {/* 4 TOP METRIC CARDS */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
+                  JUMLAH MITRA
+                </p>
+                <p className="text-2xl font-normal text-[#333333] font-serif">{totalMitraCount}</p>
+              </div>
+
+              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
+                  TOTAL VARIAN PRODUK
+                </p>
+                <p className="text-2xl font-normal text-[#333333] font-serif">{totalVarianCount}</p>
+              </div>
+
+              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
+                  TERJUAL BULAN INI
+                </p>
+                <p className="text-2xl font-normal text-[#333333] font-serif">{totalTerjualBulanIni}</p>
+              </div>
+
+              <div className="border border-[#CCCCCC] bg-[#EFECE6] p-2 space-y-1">
+                <p className="text-[7px] font-bold tracking-widest uppercase text-[#666666]">
+                  REMINDER LIMITED STOCK
+                </p>
+                <p className="text-2xl font-normal text-[#333333] font-serif">{totalLimitedStock}</p>
+              </div>
+            </div>
+
+            {/* 2 TOTAL SUMMARY CARDS */}
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div>
+                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">
+                  TOTAL PENJUALAN BULAN INI
+                </p>
+                <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
+                  IDR. {totalPenjualanRp.toLocaleString('id-ID')}
                 </p>
               </div>
-              <div className="border border-[#B3AE9F] bg-[#ECE9E2] p-4 text-center">
-                <p className="text-[10px] uppercase text-[#736E60] font-bold">TOTAL SHARE PROFIT</p>
-                <p className="font-serif text-2xl font-bold text-[#965848] mt-2">
-                  IDR. {totalShareProfit.toLocaleString('id-ID')}
+
+              <div>
+                <p className="text-[8px] font-bold tracking-[0.15em] uppercase text-[#666666]">
+                  TOTAL SHARE PROFIT
+                </p>
+                <p className="text-sm font-bold tracking-wider text-[#333333] mt-1">
+                  IDR. {totalShareProfitRp.toLocaleString('id-ID')}
                 </p>
               </div>
             </div>
 
-            {/* LIST MITRA URUT DARI TERGI TINGGI */}
-            <div className="space-y-4 pt-4">
-              <h3 className="font-serif text-center text-sm tracking-widest uppercase font-bold">
-                DAFTAR MITRA (SORTED BY HIGH SALES)
+            <hr className="border-t-2 border-[#8E7CC3] my-4" />
+
+            {/* SECTION DAFTAR MITRA */}
+            <div className="space-y-4">
+              <h3 className="text-center text-sm font-bold tracking-[0.25em] uppercase text-[#333333]">
+                DAFTAR MITRA
               </h3>
-              {reports.map((r) => (
-                <div key={r.storeId} className="border border-[#B3AE9F] bg-[#ECE9E2] p-4 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={r.photoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=150'}
-                      alt={r.storeName}
-                      className="w-16 h-16 object-cover border border-[#B3AE9F]"
-                    />
+
+              {reports.map((item) => (
+                <div key={item.storeId} className="border border-[#CCCCCC] bg-[#EFECE6] p-3 flex gap-3 items-center shadow-2xs">
+                  {/* Photo Toko */}
+                  <img
+                    src={item.photoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200'}
+                    alt={item.storeName}
+                    className="w-20 h-20 object-cover border border-[#CCCCCC]"
+                  />
+
+                  {/* Info Toko & Metrics */}
+                  <div className="flex-1 space-y-2">
                     <div>
-                      <h4 className="font-bold text-sm tracking-wider uppercase">{r.storeName}</h4>
-                      <p className="text-xs text-[#736E60]">Total Penjualan: {r.totalQty} pcs</p>
+                      <h4 className="font-bold text-xs tracking-wider uppercase text-[#333333]">
+                        {item.storeName}
+                      </h4>
+                      <p className="text-[9px] uppercase tracking-wider text-[#666666]">
+                        {item.alamat || 'KOPANG'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1 text-center">
+                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
+                        <p className="text-[6px] font-bold uppercase text-[#777777]">TOTAL PENJUALAN</p>
+                        <p className="text-xs font-bold text-[#333333]">{item.totalQty || 0}</p>
+                      </div>
+                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
+                        <p className="text-[6px] font-bold uppercase text-[#777777]">SISA STOCK</p>
+                        <p className="text-xs font-bold text-[#333333]">{item.totalStock || 0}</p>
+                      </div>
+                      <div className="bg-[#E5E0D8] p-1 border border-[#CCCCCC]">
+                        <p className="text-[6px] font-bold uppercase text-[#777777]">ORDER STOCK</p>
+                        <p className="text-xs font-bold text-[#333333]">5</p>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      setSelectedMitraId(r.storeId.toString());
-                      setActiveTab('mitra');
-                    }}
-                    className="bg-[#965848] text-white px-4 py-2 text-[10px] font-bold uppercase tracking-widest"
-                  >
-                    EDIT INFO
-                  </button>
+
+                  {/* Profit & Action Buttons */}
+                  <div className="w-24 text-right space-y-1.5">
+                    <div>
+                      <p className="text-[7px] font-bold uppercase text-[#777777]">PROFIT</p>
+                      <p className="text-[10px] font-bold text-[#333333]">
+                        IDR. {(item.totalStoreCommission || 0).toLocaleString('id-ID')}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => window.open(`https://wa.me/${(item.phone || '').replace(/[^0-9]/g, '')}`, '_blank')}
+                      className="w-full bg-[#E5E0D8] hover:bg-[#D8D4CA] text-[#333333] py-1 text-[8px] font-bold uppercase tracking-wider border border-[#CCCCCC]"
+                    >
+                      INBOX
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('mitra')}
+                      className="w-full bg-[#8D5B4C] hover:bg-[#7A4E41] text-white py-1 text-[8px] font-bold uppercase tracking-wider"
+                    >
+                      EDIT INFO
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* FORM TAMBAH MITRA (FEE & PASSWORD) */}
-            <div className="bg-[#C8C4B7] border border-[#B3AE9F] p-6 space-y-4">
-              <h3 className="font-serif text-center text-sm font-bold uppercase tracking-widest">TAMBAH MITRA</h3>
-              <form onSubmit={handleAddStore} className="grid grid-cols-2 gap-4 text-xs font-bold uppercase">
-                <div className="col-span-2 sm:col-span-1">
-                  <label>Nama Toko</label>
-                  <input
-                    type="text"
-                    value={newStoreName}
-                    onChange={(e) => setNewStoreName(e.target.value)}
-                    required
-                    className="w-full p-2 mt-1 bg-white border border-[#B3AE9F]"
-                  />
+            <hr className="border-t-2 border-[#8E7CC3] my-4" />
+
+            {/* SECTION TAMBAH MITRA */}
+            <div className="bg-[#C8C4B8] border border-[#B8B4A8] p-4 space-y-4">
+              <h3 className="text-center text-xs font-bold tracking-[0.25em] uppercase text-[#333333]">
+                TAMBAH MITRA
+              </h3>
+
+              <form onSubmit={handleAddMitra} className="space-y-3">
+                <div className="flex gap-3 items-center">
+                  {/* UPLOAD PHOTO BUTTON */}
+                  <label className="w-24 h-20 bg-[#00A896] text-white flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:bg-[#008D7D] transition">
+                    <span className="text-[8px] font-bold tracking-wider uppercase leading-tight">
+                      UPLOAD PHOTO HERE
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* INPUT FIELDS GRID */}
+                  <div className="flex-1 grid grid-cols-2 gap-2 text-[9px] font-bold uppercase">
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">NAMA TOKO</span>
+                      <input
+                        type="text"
+                        value={namaToko}
+                        onChange={(e) => setNamaToko(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">KONTAK</span>
+                      <input
+                        type="text"
+                        value={kontak}
+                        onChange={(e) => setKontak(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">OWNER</span>
+                      <input
+                        type="text"
+                        value={owner}
+                        onChange={(e) => setOwner(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">FEE (%)</span>
+                      <input
+                        type="number"
+                        value={fee}
+                        onChange={(e) => setFee(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">ALAMAT</span>
+                      <input
+                        type="text"
+                        value={alamat}
+                        onChange={(e) => setAlamat(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="w-16">PASWORD</span>
+                      <input
+                        type="text"
+                        value={pasword}
+                        onChange={(e) => setPasword(e.target.value)}
+                        required
+                        className="flex-1 bg-white border border-[#B3AE9F] p-1 text-[9px] outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <label>Kontak (WA)</label>
-                  <input
-                    type="text"
-                    value={newKontak}
-                    onChange={(e) => setNewKontak(e.target.value)}
-                    required
-                    className="w-full p-2 mt-1 bg-white border border-[#B3AE9F]"
-                  />
+
+                {/* SUBMIT BUTTON */}
+                <div className="text-center pt-2">
+                  <button
+                    type="submit"
+                    className="bg-[#8D5B4C] hover:bg-[#7A4E41] text-white px-8 py-2 text-xs font-bold tracking-[0.2em] uppercase transition"
+                  >
+                    SUBMIT
+                  </button>
                 </div>
-                <div>
-                  <label>Fee (%)</label>
-                  <input
-                    type="number"
-                    value={newFee}
-                    onChange={(e) => setNewFee(e.target.value)}
-                    required
-                    className="w-full p-2 mt-1 bg-white border border-[#B3AE9F]"
-                  />
-                </div>
-                <div>
-                  <label>Pasword</label>
-                  <input
-                    type="text"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    className="w-full p-2 mt-1 bg-white border border-[#B3AE9F]"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label>Upload Photo Toko (Auto 200x200)</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handlePhotoUpload(e, setNewPhotoBase64)}
-                    className="w-full p-2 mt-1 bg-white border border-[#B3AE9F]"
-                  />
-                </div>
-                <button type="submit" className="col-span-2 bg-[#965848] text-white py-3 font-bold tracking-widest uppercase">
-                  SUBMIT
-                </button>
               </form>
             </div>
-          </div>
+          </>
         )}
 
-        {/* TAB 2: STOCK */}
+        {/* TAB STOCK */}
         {activeTab === 'stock' && (
-          <div className="space-y-6">
-            <h2 className="font-serif text-center font-bold tracking-widest uppercase">INPUT STOCK</h2>
-            {/* Form Input/Edit Product... */}
+          <div className="space-y-4 text-center py-10">
+            <h3 className="font-serif font-bold uppercase tracking-widest text-sm">HALAMAN STOCK</h3>
+            <p className="text-xs text-[#666666]">Silakan kelola stok produk pada tab ini.</p>
           </div>
         )}
 
-        {/* TAB 3: MONITORING MITRA & QR GENERATION */}
+        {/* TAB MITRA */}
         {activeTab === 'mitra' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-4 border border-[#B3AE9F]">
-              <div>
-                <label className="text-xs font-bold uppercase tracking-widest">PILIH NAMA TOKO: </label>
-                <select
-                  value={selectedMitraId}
-                  onChange={(e) => setSelectedMitraId(e.target.value)}
-                  className="p-2 border border-[#B3AE9F] font-bold text-xs uppercase"
-                >
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={mitraPassword}
-                  onChange={(e) => setMitraPassword(e.target.value)}
-                  className="p-2 border border-[#B3AE9F] text-xs font-mono"
-                  placeholder="Password"
-                />
-                <button
-                  onClick={handleUpdateMitraPassword}
-                  className="bg-[#00A896] text-white px-4 py-2 text-xs font-bold uppercase"
-                >
-                  Simpan & Notif WA
-                </button>
-              </div>
-            </div>
-
-            {/* LIST STOCK TOKO & TOMBOL CREATE QR UNIK */}
-            <div className="space-y-4">
-              {activeMitra?.stockList?.map((item: any) => (
-                <div key={item.inventoryId} className="border p-4 bg-white flex justify-between items-center">
-                  <div>
-                    <h4 className="font-bold">{item.productName}</h4>
-                    <p className="text-xs text-[#736E60]">Stok: {item.stock} pcs</p>
-                  </div>
-                  <button
-                    onClick={() => handleCreateQR(item.productId)}
-                    className="bg-[#965848] text-white px-4 py-2 text-xs font-bold uppercase tracking-widest"
-                  >
-                    CREATE QR
-                  </button>
-                </div>
-              ))}
-            </div>
+          <div className="space-y-4 text-center py-10">
+            <h3 className="font-serif font-bold uppercase tracking-widest text-sm">HALAMAN MITRA</h3>
+            <p className="text-xs text-[#666666]">Silakan monitor detail mitra dan kelola QR Code unik.</p>
           </div>
         )}
       </main>
-
-      {/* POPUP MODAL QR CODE TAG (DIRECT FLIP.ID PAYMENT) */}
-      {qrModalData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 max-w-sm w-full text-center space-y-4 rounded shadow-2xl">
-            <h3 className="font-bold uppercase text-sm tracking-widest text-[#00A896]">
-              QR PAYMENT UNIK (FLIP.ID)
-            </h3>
-            <img src={qrModalData.qrImageDataUrl} alt="QR Code" className="w-48 h-48 mx-auto border p-2" />
-            <p className="text-[10px] font-mono text-gray-500">{qrModalData.inventory.qrCodeKey}</p>
-            <button
-              onClick={() => setQrModalData(null)}
-              className="w-full bg-gray-200 py-2 text-xs font-bold uppercase tracking-widest"
-            >
-              TUTUP
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
