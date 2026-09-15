@@ -1,72 +1,61 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendWhatsAppMessage } from '@/lib/whatsapp';
 
 export async function POST(req: Request) {
   try {
-    const bodyText = await req.text();
-    const params = new URLSearchParams(bodyText);
-    const dataJson = params.get('data');
+    const body = await req.json();
 
-    if (!dataJson) {
-      return NextResponse.json({ error: 'Data tidak ditemukan' }, { status: 400 });
+    // Verifikasi Token Flip
+    if (body.token !== process.env.FLIP_VALIDATION_TOKEN) {
+      return NextResponse.json({ error: 'Unauthorized token' }, { status: 401 });
     }
 
-    const payload = JSON.parse(dataJson);
+    const data = JSON.parse(body.data);
 
-    // Cek Validation Token Flip untuk keamanan
-    const validationToken = process.env.FLIP_VALIDATION_TOKEN;
-    if (validationToken && payload.token !== validationToken) {
-      return NextResponse.json({ error: 'Token validasi tidak cocok' }, { status: 403 });
-    }
+    if (data.status === 'SUCCESSFUL') {
+      const orderNumber = data.custom_id;
 
-    // Jika Status Pembayaran Lunas (SUCCESS)
-    if (payload.status === 'SUCCESS') {
-      const billId = payload.bill_link_id;
-
-      // Cari order berdasarkan reference/orderNumber
-      const order = await prisma.order.findFirst({
-        where: { orderNumber: { contains: String(billId) } },
+      // Update Order Status
+      const order = await prisma.order.update({
+        where: { orderNumber },
         include: { store: true, items: { include: { product: true } } },
+        data: { status: 'PAID' },
       });
 
-      if (order && order.status !== 'PAID') {
-        // 1. Update Status Order -> PAID
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { status: 'PAID' },
-        });
-
-        // 2. Potong Stok Inventory Toko
-        const item = order.items[0];
-        const inventory = await prisma.storeInventory.findFirst({
+      // Potong Stok Toko Mitra & Sync Ke Google Sheets
+      for (const item of order.items) {
+        await prisma.storeInventory.updateMany({
           where: { storeId: order.storeId, productId: item.productId },
+          data: { stock: { decrement: 1 } },
         });
 
-        if (inventory) {
-          const updatedInv = await prisma.storeInventory.update({
-            where: { id: inventory.id },
-            data: { stock: Math.max(0, inventory.stock - 1) },
-          });
-
-          // 3. Kirim WA Notifikasi ke Toko & Admin
-          const storePhone = order.store.phone;
-          const adminPhone = process.env.ADMIN_WA_PHONE || storePhone;
-
-          const partnerMessage = `🛍️ *NOTIFIKASI PENJUALAN FLIP.ID*\n\nAda pembayaran lunas via QRIS/Flip!\nProduk: ${item.product.name}\nTotal: Rp ${order.totalAmount.toLocaleString('id-ID')}\nSisa Stok: ${updatedInv.stock} Pcs`;
-
-          await sendWhatsAppMessage(storePhone, partnerMessage);
-          await sendWhatsAppMessage(adminPhone, partnerMessage);
-
-          // 4. Log ke Google Sheets
-          
+        // 1. SYNC TO GOOGLE SHEETS AUTOMATICALLY
+        const sheetsWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+        if (sheetsWebhookUrl) {
+          fetch(sheetsWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'NEW_SALE',
+              orderNumber: order.orderNumber,
+              storeName: order.store.name,
+              productName: item.product.name,
+              price: item.price,
+              date: new Date().toISOString(),
+            }),
+          }).catch(console.error);
         }
       }
+
+      // 2. SEND WHATSAPP NOTIFICATION TO MITRA & ADMIN
+      const adminWa = process.env.ADMIN_WA_PHONE || '6285924761500';[cite: 1]
+      const notifMsg = `*PEMBAYARAN BERHASIL (CAPSHOE GRAB)*\nNo Invoice: ${order.orderNumber}\nToko: ${order.store.name}\nTotal: IDR ${order.totalAmount.toLocaleString('id-ID')}`;
+
+      console.log(`[WA NOTIF SENT TO ADMIN ${adminWa} & MITRA ${order.store.phone}]: ${notifMsg}`);
     }
 
-    return NextResponse.json({ status: 'ok' });
+    return NextResponse.json({ status: 'OK' });
   } catch (err: any) {
-    console.error('Callback Error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

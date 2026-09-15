@@ -10,37 +10,44 @@ generator client {
 model Store {
   id             Int              @id @default(autoincrement())
   name           String
-  commissionRate Float
+  owner          String?
+  alamat         String?
   phone          String
-  username       String           @unique @default("mitra")
+  username       String           @unique
   password       String           @default("123456")
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @default(now()) @updatedAt
+  commissionRate Float            @default(15.0)
+  photoUrl       String?
   inventories    StoreInventory[]
   orders         Order[]
-  withdrawals    Withdrawal[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 }
 
 model Product {
   id          Int              @id @default(autoincrement())
   sku         String           @unique
   name        String
+  category    String           @default("TOPI")
   price       Float
-  category    String           @default("Umum")
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @default(now()) @updatedAt
+  photoUrl    String?
   inventories StoreInventory[]
   orderItems  OrderItem[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 }
 
 model StoreInventory {
-  id         Int      @id @default(autoincrement())
-  storeId    Int
-  productId  Int
-  qrCodeKey  String   @unique
-  stock      Int      @default(0)
-  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        Int      @id @default(autoincrement())
+  storeId   Int
+  productId Int
+  stock     Int      @default(0)
+  qrCodeKey String   @unique
+  store     Store    @relation(fields: [storeId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, productId])
 }
 
 model Order {
@@ -48,11 +55,11 @@ model Order {
   orderNumber String      @unique
   storeId     Int
   totalAmount Float
-  paymentFee  Float
-  status      String      @default("PAID")
-  createdAt   DateTime    @default(now())
-  store       Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  paymentFee  Float       @default(0)
+  status      String      @default("PENDING")
+  store       Store       @relation(fields: [storeId], references: [id])
   items       OrderItem[]
+  createdAt   DateTime    @default(now())
 }
 
 model OrderItem {
@@ -63,15 +70,6 @@ model OrderItem {
   storeCommissionRate   Float
   storeCommissionAmount Float
   netSupplierAmount     Float
-  order                 Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product               Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-}
-
-model Withdrawal {
-  id          Int      @id @default(autoincrement())
-  storeId     Int
-  amount      Float
-  proofUrl    String?
-  createdAt   DateTime @default(now())
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order                 Order   @relation(fields: [orderId], references: [id])
+  product               Product @relation(fields: [productId], references: [id])
 }
