@@ -21,10 +21,11 @@ export async function POST(req: Request) {
       },
     });
 
-    // Buat URL checkout yang tertanam di QR Code
-    // Buat URL checkout yang tertanam di QR Code
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://capshoe.vercel.app';
+// Ganti bagian pembentukan URL dengan domain Vercel kamu secara langsung
+// Paksa langsung gunakan URL Vercel production
+    const baseUrl = 'https://capshoegrab-rdd2-q7ywqds3h-capshoe.vercel.app';
     const checkoutUrl = `${baseUrl}/checkout/${qrCodeKey}`;
+
     const qrImageDataUrl = await QRCode.toDataURL(checkoutUrl, { width: 300 });
 
     return NextResponse.json({
