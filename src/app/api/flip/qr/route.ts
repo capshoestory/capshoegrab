@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const netSupplierAmount = totalAmount - storeCommissionAmount;
 
     // 1. Buat Record Order Pending di Supabase
-    const order = await prisma.order.create({
+    await prisma.order.create({
       data: {
         orderNumber,
         storeId: store.id,
@@ -37,17 +37,16 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. Tentukan Base Domain Publik (Vercel)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://capshoegrab-7z2u6w3uz-capshoe.vercel.app';
+    // 2. Tentukan URL Tujuan (Direct ke Flip.id API atau Direct Struk)
+    let targetPaymentUrl = `https://capshoegrab.vercel.app/receipt/${orderNumber}`;
 
-    // 3. Request Payment ke Flip.id / Buat Target Link Struk Publik
-    const authHeader = Buffer.from(`${process.env.FLIP_SECRET_KEY || ''}:`).toString('base64');
-    
-    let targetPaymentUrl = `${baseUrl}/receipt/${orderNumber}`;
-
+    // 3. Panggil API Flip.id jika Secret Key tersedia
     if (process.env.FLIP_SECRET_KEY) {
       try {
-        const response = await fetch(`${process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2'}/pwf/bill`, {
+        const authHeader = Buffer.from(`${process.env.FLIP_SECRET_KEY}:`).toString('base64');
+        const flipApiUrl = process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2';
+
+        const response = await fetch(`${flipApiUrl}/pwf/bill`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -64,15 +63,16 @@ export async function POST(req: Request) {
         });
 
         const flipData = await response.json();
-        if (flipData.link_url) {
+        if (flipData && flipData.link_url) {
+          // Direct URL Payment Gateway Flip.id Asli
           targetPaymentUrl = flipData.link_url;
         }
       } catch (e) {
-        console.error('Flip API Call fallback:', e);
+        console.error('Flip API Error fallback:', e);
       }
     }
 
-    // 4. Generate QR Code berbasis URL Publik (Bukan Localhost)
+    // 4. Generate QR Code Unik Berdasarkan Payment URL Resmi Flip.id
     const qrImageDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
       targetPaymentUrl
     )}`;
