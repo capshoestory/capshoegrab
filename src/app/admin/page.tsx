@@ -694,6 +694,89 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
+{/* MENU PAYMENT GATEWAY FLIP.ID SETTINGS */}
+<div className="bg-[#E5E0D8] border border-[#B3AE9F] p-4 space-y-3 my-6">
+  <div className="flex justify-between items-center border-b border-[#CCCCCC] pb-2">
+    <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[#333333]">
+      PAYMENT GATEWAY (FLIP.ID INTEGRATION)
+    </h3>
+    <span className="bg-[#00A896] text-white text-[8px] font-bold px-2 py-0.5 uppercase tracking-widest rounded-xs">
+      STATUS: AKTIF (CONNECTED)
+    </span>
+  </div>
+
+  <div className="grid grid-cols-2 gap-3 text-[9px] font-bold uppercase">
+    <div>
+      <label className="text-gray-600 block mb-1">FLIP SECRET KEY</label>
+      <input
+        type="password"
+        value="••••••••••••••••••••••••"
+        disabled
+        className="w-full bg-white border border-[#CCCCCC] p-1.5 text-gray-500"
+      />
+    </div>
+    <div>
+      <label className="text-gray-600 block mb-1">WEBHOOK CALLBACK URL</label>
+      <input
+        type="text"
+        value="https://capshoegrab.vercel.app/api/flip/callback"
+        disabled
+        className="w-full bg-white border border-[#CCCCCC] p-1.5 text-gray-500 font-mono text-[8px]"
+      />
+    </div>
+  </div>
+</div>
+
+/* MODAL POPUP DISPLAY QR CODE PAYMENT & REALTIME SCAN NOTIFICATION */
+{qrModalData && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
+    <div className="bg-[#EFECE6] border-2 border-[#00A896] p-6 max-w-sm w-full text-center space-y-4 shadow-2xl relative">
+      <button
+        onClick={() => setQrModalData(null)}
+        className="absolute top-2 right-3 text-lg font-bold text-gray-500 hover:text-black"
+      >
+        ✕
+      </button>
+
+      <h3 className="font-serif font-black uppercase text-sm tracking-widest text-[#00A896]">
+        QR PAYMENT UNIK (FLIP.ID)
+      </h3>
+
+      <div className="bg-white p-4 border border-[#CCCCCC] inline-block shadow-inner">
+        <img
+          src={qrModalData.qrImageDataUrl}
+          alt="QR Code Flip Payment"
+          className="w-48 h-48 mx-auto object-contain"
+        />
+      </div>
+
+      <div className="space-y-1 text-center">
+        <p className="text-[10px] uppercase font-mono tracking-widest text-gray-600">
+          INVOICE: <span className="font-bold text-black">{qrModalData.orderNumber}</span>
+        </p>
+        <p className="text-[9px] uppercase tracking-wider text-[#8D5B4C] font-bold animate-pulse">
+          • MENUNGGU SCAN & PEMBAYARAN...
+        </p>
+      </div>
+
+      <div className="pt-2 flex gap-2">
+        <button
+          onClick={() => window.open(qrModalData.paymentUrl || '#', '_blank')}
+          className="flex-1 bg-[#00A896] hover:bg-[#008D7D] text-white py-2 text-[10px] font-bold uppercase tracking-wider"
+        >
+          BUKA PAYMENT LINK
+        </button>
+        <button
+          onClick={() => setQrModalData(null)}
+          className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 text-[10px] font-bold uppercase tracking-wider"
+        >
+          TUTUP
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
       {/* MODAL DISPLAY QR PAYMENT UNIK (FLIP.ID) */}
       {qrModalData && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
