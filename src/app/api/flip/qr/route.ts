@@ -14,8 +14,11 @@ export async function POST(req: Request) {
 
     const orderNumber = `INV-${Date.now()}`;
     const totalAmount = amount || product.price;
+    const commissionRate = store.commissionRate || 15;
+    const storeCommissionAmount = (totalAmount * commissionRate) / 100;
+    const netSupplierAmount = totalAmount - storeCommissionAmount;
 
-    // 1. Buat Record Order Pending di Supabase
+    // 1. Buat Record Order Pending di Supabase dengan field OrderItem yang lengkap
     const order = await prisma.order.create({
       data: {
         orderNumber,
@@ -26,7 +29,9 @@ export async function POST(req: Request) {
           create: {
             productId: product.id,
             price: totalAmount,
-            storeCommissionAmount: (totalAmount * (store.commissionRate || 15)) / 100,
+            storeCommissionRate: commissionRate,
+            storeCommissionAmount: storeCommissionAmount,
+            netSupplierAmount: netSupplierAmount,
           },
         },
       },
@@ -52,7 +57,6 @@ export async function POST(req: Request) {
 
     const flipData = await response.json();
 
-    // Simpan QR Data URL
     const qrImageDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
       flipData.link_url || `https://flip.id/pay/${orderNumber}`
     )}`;
