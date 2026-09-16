@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const storeCommissionAmount = (totalAmount * commissionRate) / 100;
     const netSupplierAmount = totalAmount - storeCommissionAmount;
 
-    // 1. Buat Record Order Pending di Supabase
+    // 1. Simpan Record Order Pending ke Supabase
     await prisma.order.create({
       data: {
         orderNumber,
@@ -37,19 +37,29 @@ export async function POST(req: Request) {
       },
     });
 
-    const secretKey = process.env.FLIP_SECRET_KEY;
+    // 2. Format Sanitasi API Key & URL Endpoint
+    const rawSecretKey = process.env.FLIP_SECRET_KEY || '';
+    const secretKey = rawSecretKey.replace(/['"]+/g, '').trim();
+
+    let rawFlipUrl = process.env.FLIP_API_URL || 'https://bigbox-sandbox.flip.id/api/v2';
+    // Mengganti underscore yang tidak sengaja terketik di domain sandbox
+    rawFlipUrl = rawFlipUrl.replace('bigbox_sandbox', 'bigbox-sandbox').replace(/[\[\]'"]+/g, '').trim();
+    if (rawFlipUrl.endsWith('/')) {
+      rawFlipUrl = rawFlipUrl.slice(0, -1);
+    }
+
     if (!secretKey) {
       return NextResponse.json(
-        { error: 'FLIP_SECRET_KEY belum dipasang di Vercel Environment Variables' },
+        { error: 'FLIP_SECRET_KEY belum dikonfigurasi di Vercel Environment Variables' },
         { status: 400 }
       );
     }
 
-    // 2. Request Link Pembayaran ke Flip.id API
+    const targetEndpoint = `${rawFlipUrl}/pwf/bill`;
     const authHeader = Buffer.from(`${secretKey}:`).toString('base64');
-    const flipApiUrl = process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2';
 
-    const response = await fetch(`${flipApiUrl}/pwf/bill`, {
+    // 3. Eksekusi Request HTTP dengan Penanganan SSL/Network Timeout
+    const response = await fetch(targetEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -68,16 +78,16 @@ export async function POST(req: Request) {
     const flipData = await response.json();
 
     if (!response.ok || !flipData.link_url) {
-      console.error('Flip Response Error:', flipData);
+      console.error('Flip API Error Response:', flipData);
       return NextResponse.json(
-        { error: `Gagal dari Flip API: ${flipData.message || JSON.stringify(flipData)}` },
+        { error: `Flip API Response: ${flipData.message || JSON.stringify(flipData)}` },
         { status: 400 }
       );
     }
 
     const targetPaymentUrl = flipData.link_url;
 
-    // 3. QR Code Mengarah 100% ke Payment Link Flip.id
+    // 4. Generate QR Code ke Payment Link Resmi Flip
     const qrImageDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
       targetPaymentUrl
     )}`;
@@ -89,6 +99,7 @@ export async function POST(req: Request) {
       paymentUrl: targetPaymentUrl,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('Fetch Error:', err);
+    return NextResponse.json({ error: `Fetch Error: ${err.message || 'Gagal terhubung ke Flip API'}` }, { status: 500 });
   }
 }
