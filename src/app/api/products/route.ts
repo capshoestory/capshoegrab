@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// GET ALL PRODUCTS DARI SUPABASE
 export async function GET() {
   try {
     const products = await prisma.product.findMany({
@@ -13,12 +12,12 @@ export async function GET() {
   }
 }
 
-// SIMPAN PRODUK BARU KE SUPABASE
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { sku, name, category, price, photoUrl } = body;
+    const { sku, name, category, price, stock, photoUrl } = body;
 
+    // 1. SIMPAN LANGSUNG KE SUPABASE
     const newProduct = await prisma.product.create({
       data: {
         sku,
@@ -29,22 +28,39 @@ export async function POST(req: Request) {
       },
     });
 
-    // Otomatis alokasikan inventoris ke seluruh toko mitra yang ada di Supabase
+    // Alokasikan ke seluruh toko mitra di Supabase
     const allStores = await prisma.store.findMany();
     for (const store of allStores) {
       await prisma.storeInventory.create({
         data: {
           storeId: store.id,
           productId: newProduct.id,
-          stock: 10, // Default stok awal
+          stock: stock ? Number(stock) : 10,
           qrCodeKey: `QR-${store.id}-${newProduct.id}-${Date.now()}`,
         },
       });
     }
 
+    // 2. KIRIM DARI SERVER KE GOOGLE SHEETS WEBHOOK
+    const sheetsWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL || process.env.NEXT_PUBLIC_GOOGLE_SHEETS_WEBHOOK_URL;
+    if (sheetsWebhookUrl) {
+      await fetch(sheetsWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'ADD_PRODUCT',
+          sku: newProduct.sku,
+          name: newProduct.name,
+          category: newProduct.category,
+          price: newProduct.price,
+          stock: stock || 10,
+        }),
+      }).catch((err) => console.error('Error sync Google Sheets from Server:', err));
+    }
+
     return NextResponse.json(newProduct);
   } catch (err: any) {
-    console.error('Error insert product to Supabase:', err);
+    console.error('Error insert product:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
