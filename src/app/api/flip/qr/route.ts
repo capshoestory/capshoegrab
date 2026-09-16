@@ -37,42 +37,47 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. Tentukan URL Tujuan (Direct ke Flip.id API atau Direct Struk)
-    let targetPaymentUrl = `https://capshoegrab.vercel.app/receipt/${orderNumber}`;
-
-    // 3. Panggil API Flip.id jika Secret Key tersedia
-    if (process.env.FLIP_SECRET_KEY) {
-      try {
-        const authHeader = Buffer.from(`${process.env.FLIP_SECRET_KEY}:`).toString('base64');
-        const flipApiUrl = process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2';
-
-        const response = await fetch(`${flipApiUrl}/pwf/bill`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: `Basic ${authHeader}`,
-          },
-          body: new URLSearchParams({
-            title: `Capshoe - ${product.name}`,
-            amount: totalAmount.toString(),
-            type: 'SINGLE',
-            step: '1',
-            sender_name: store.name,
-            custom_id: orderNumber,
-          }),
-        });
-
-        const flipData = await response.json();
-        if (flipData && flipData.link_url) {
-          // Direct URL Payment Gateway Flip.id Asli
-          targetPaymentUrl = flipData.link_url;
-        }
-      } catch (e) {
-        console.error('Flip API Error fallback:', e);
-      }
+    const secretKey = process.env.FLIP_SECRET_KEY;
+    if (!secretKey) {
+      return NextResponse.json(
+        { error: 'FLIP_SECRET_KEY belum dipasang di Vercel Environment Variables' },
+        { status: 400 }
+      );
     }
 
-    // 4. Generate QR Code Unik Berdasarkan Payment URL Resmi Flip.id
+    // 2. Request Link Pembayaran ke Flip.id API
+    const authHeader = Buffer.from(`${secretKey}:`).toString('base64');
+    const flipApiUrl = process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2';
+
+    const response = await fetch(`${flipApiUrl}/pwf/bill`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${authHeader}`,
+      },
+      body: new URLSearchParams({
+        title: `Capshoe - ${product.name}`,
+        amount: totalAmount.toString(),
+        type: 'SINGLE',
+        step: '1',
+        sender_name: store.name,
+        custom_id: orderNumber,
+      }),
+    });
+
+    const flipData = await response.json();
+
+    if (!response.ok || !flipData.link_url) {
+      console.error('Flip Response Error:', flipData);
+      return NextResponse.json(
+        { error: `Gagal dari Flip API: ${flipData.message || JSON.stringify(flipData)}` },
+        { status: 400 }
+      );
+    }
+
+    const targetPaymentUrl = flipData.link_url;
+
+    // 3. QR Code Mengarah 100% ke Payment Link Flip.id
     const qrImageDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
       targetPaymentUrl
     )}`;
