@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const storeCommissionAmount = (totalAmount * commissionRate) / 100;
     const netSupplierAmount = totalAmount - storeCommissionAmount;
 
-    // 1. Buat Record Order Pending di Supabase dengan field OrderItem yang lengkap
+    // 1. Buat Record Order Pending di Supabase
     const order = await prisma.order.create({
       data: {
         orderNumber,
@@ -37,35 +37,51 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. Request QR Code Payment ke Flip.id API
-    const authHeader = Buffer.from(`${process.env.FLIP_SECRET_KEY}:`).toString('base64');
-    const response = await fetch(`${process.env.FLIP_API_URL}/pwf/bill`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${authHeader}`,
-      },
-      body: new URLSearchParams({
-        title: `Capshoe - ${product.name}`,
-        amount: totalAmount.toString(),
-        type: 'SINGLE',
-        step: '1',
-        sender_name: store.name,
-        custom_id: orderNumber,
-      }),
-    });
+    // 2. Tentukan Base Domain Publik (Vercel)
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://capshoegrab-7z2u6w3uz-capshoe.vercel.app';
 
-    const flipData = await response.json();
+    // 3. Request Payment ke Flip.id / Buat Target Link Struk Publik
+    const authHeader = Buffer.from(`${process.env.FLIP_SECRET_KEY || ''}:`).toString('base64');
+    
+    let targetPaymentUrl = `${baseUrl}/receipt/${orderNumber}`;
 
+    if (process.env.FLIP_SECRET_KEY) {
+      try {
+        const response = await fetch(`${process.env.FLIP_API_URL || 'https://bigbox_sandbox.flip.id/api/v2'}/pwf/bill`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Basic ${authHeader}`,
+          },
+          body: new URLSearchParams({
+            title: `Capshoe - ${product.name}`,
+            amount: totalAmount.toString(),
+            type: 'SINGLE',
+            step: '1',
+            sender_name: store.name,
+            custom_id: orderNumber,
+          }),
+        });
+
+        const flipData = await response.json();
+        if (flipData.link_url) {
+          targetPaymentUrl = flipData.link_url;
+        }
+      } catch (e) {
+        console.error('Flip API Call fallback:', e);
+      }
+    }
+
+    // 4. Generate QR Code berbasis URL Publik (Bukan Localhost)
     const qrImageDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-      flipData.link_url || `https://flip.id/pay/${orderNumber}`
+      targetPaymentUrl
     )}`;
 
     return NextResponse.json({
       success: true,
       orderNumber,
       qrImageDataUrl,
-      paymentUrl: flipData.link_url,
+      paymentUrl: targetPaymentUrl,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
