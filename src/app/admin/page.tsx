@@ -11,7 +11,7 @@ export default function AdminDashboardPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
 
-  // State Halaman Dashboard & Stock
+  // State Form Dashboard & Stock
   const [namaToko, setNamaToko] = useState('');
   const [owner, setOwner] = useState('');
   const [alamat, setAlamat] = useState('');
@@ -29,7 +29,7 @@ export default function AdminDashboardPage() {
   const [productPhoto, setProductPhoto] = useState('');
   const [shortCategory, setShortCategory] = useState('ALL');
 
-  // State Halaman Monitoring Mitra
+  // State Monitoring Mitra & Single QR Modal
   const [selectedMitraId, setSelectedMitraId] = useState<string>('');
   const [editPasswordInput, setEditPasswordInput] = useState('');
   const [addStockProductSku, setAddStockProductSku] = useState('');
@@ -37,7 +37,7 @@ export default function AdminDashboardPage() {
   const [qrModalData, setQrModalData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FETCH ALL DATA FROM SUPABASE
+  // FETCH DATA SUPABASE
   const fetchData = async () => {
     try {
       const [resR, resP, resS] = await Promise.all([
@@ -72,7 +72,7 @@ export default function AdminDashboardPage() {
     fetchData();
   }, []);
 
-  // COMPRESS PHOTO TO 200x200 PX
+  // COMPRESS PHOTO (200x200)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>, setTarget: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -118,7 +118,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // HANDLER TAMBAH STOK KE TOKO MITRA
+  // HANDLER ALOKASI STOK TOKO
   const handleAddStockToMitra = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMitraId || !addStockProductSku || !addStockQty) return;
@@ -152,14 +152,18 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // HANDLER CREATE QR CODE UNIK (FLIP.ID INTEGRATION)
-  const handleCreateQR = async (productId: number) => {
+  // HANDLER CREATE QR CODE UNIK
+  const handleCreateQR = async (productId: number, priceAmount?: number) => {
     if (!selectedMitraId) return alert('Pilih Toko Mitra terlebih dahulu!');
     try {
-      const res = await fetch('/api/inventory', {
+      const res = await fetch('/api/flip/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: Number(selectedMitraId), productId, stockToAdd: 0 }),
+        body: JSON.stringify({
+          storeId: Number(selectedMitraId),
+          productId,
+          amount: priceAmount,
+        }),
       });
 
       const data = await res.json();
@@ -214,7 +218,7 @@ export default function AdminDashboardPage() {
     } finally { setIsSubmitting(false); }
   };
 
-  // DATA COMPUTATIONS
+  // CALCULATED VALUES
   const totalMitraCount = stores.length || reports.length;
   const totalVarianCount = products.length;
   const totalTerjualBulanIni = reports.reduce((sum, r) => sum + (r.totalQty || 0), 0);
@@ -224,7 +228,6 @@ export default function AdminDashboardPage() {
 
   const activeMitraData = reports.find((r) => r.storeId.toString() === selectedMitraId) || reports[0];
   const stockListMitra = activeMitraData?.stockList || [];
-
   const selectedProductDetail = products.find((p) => p.sku === addStockProductSku) || products[0];
 
   return (
@@ -266,7 +269,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <main className="max-w-xl mx-auto px-4 pt-6 space-y-8">
-        {/* ================= TAB 1: DASHBOARD ================= */}
+        {/* TAB 1: DASHBOARD */}
         {activeTab === 'dashboard' && (
           <>
             <div className="text-center">
@@ -361,7 +364,7 @@ export default function AdminDashboardPage() {
           </>
         )}
 
-        {/* ================= TAB 2: STOCK ================= */}
+        {/* TAB 2: STOCK */}
         {activeTab === 'stock' && (
           <>
             <div className="text-center"><h2 className="text-xs font-bold tracking-[0.3em] uppercase">{editingProductId ? 'EDIT STOCK PRODUK' : 'INPUT STOCK'}</h2></div>
@@ -407,7 +410,7 @@ export default function AdminDashboardPage() {
           </>
         )}
 
-        {/* ================= TAB 3: MONITORING MITRA (SESUAI MOCK-UP 3) ================= */}
+        {/* TAB 3: MONITORING MITRA */}
         {activeTab === 'mitra' && (
           <>
             <div className="text-center">
@@ -416,9 +419,7 @@ export default function AdminDashboardPage() {
               </h2>
             </div>
 
-            {/* HEADER METRICS MITRA */}
             <div className="space-y-4">
-              {/* ROW 1: SELECT NAMA TOKO & EDIT PASSWORD */}
               <div className="grid grid-cols-2 gap-4 text-[9px] font-bold uppercase">
                 <div className="flex items-center gap-2">
                   <span className="w-20 text-[#555555]">NAMA TOKO</span>
@@ -459,7 +460,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* ROW 2: OWNER, ALAMAT, CONTACT, SALES FEE */}
               <div className="grid grid-cols-4 gap-2 text-center text-[8px] font-bold uppercase">
                 <div>
                   <p className="text-[#777777] mb-1">OWNER</p>
@@ -479,9 +479,7 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* ROW 3: FOTO TOKO + 3 CARDS (TOTAL STOCK, TERJUAL BULAN INI, PROFIT SHARING) */}
               <div className="grid grid-cols-4 gap-2 items-center text-center">
-                {/* Store Photo Container */}
                 <div className="space-y-1">
                   <img
                     src={activeMitraData?.photoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200'}
@@ -514,14 +512,12 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* SECTION TITLE: STOCK TOKO */}
             <div className="pt-4 text-center">
               <h2 className="text-sm font-bold tracking-[0.3em] uppercase text-[#333333]">
                 STOCK TOKO
               </h2>
             </div>
 
-            {/* TABLE HEADERS & FILTER */}
             <div className="flex justify-between items-center text-[8px] font-bold uppercase tracking-wider text-[#666666]">
               <div className="flex items-center gap-2">
                 <span>SHORT BY CATEGORY</span>
@@ -535,7 +531,6 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* LIST STOCK TOKO MITRA */}
             <div className="space-y-3">
               {stockListMitra.map((item: any) => {
                 const isLowStock = item.stock < 5;
@@ -566,9 +561,7 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
 
-                    {/* TWO ACTION BUTTONS: TAMBAH STOCK & CREATE QR */}
                     <div className="w-32 space-y-1">
-                      {/* TOMBOL MERAH JIKA STOK < 5 */}
                       <button
                         type="button"
                         onClick={() => {
@@ -584,10 +577,9 @@ export default function AdminDashboardPage() {
                         TAMBAH STOCK
                       </button>
 
-                      {/* TOMBOL CREATE QR CODE UNIK */}
                       <button
                         type="button"
-                        onClick={() => handleCreateQR(item.productId)}
+                        onClick={() => handleCreateQR(item.productId, item.price)}
                         className="w-full bg-[#8D5B4C] hover:bg-[#7A4E41] text-white py-1.5 text-[8px] font-bold uppercase tracking-wider"
                       >
                         CREATE QR
@@ -598,7 +590,6 @@ export default function AdminDashboardPage() {
               })}
             </div>
 
-            {/* FORM TAMBAH STOCK TOKO */}
             <div className="bg-[#C8C4B8] border border-[#B8B4A8] p-4 space-y-3 my-6">
               <h3 className="text-center text-xs font-bold tracking-[0.25em] uppercase text-[#333333]">
                 TAMBAH STOCK
@@ -666,7 +657,6 @@ export default function AdminDashboardPage() {
               </form>
             </div>
 
-            {/* SECTION HISTORY TRANSAKSI */}
             <div className="bg-white border border-[#CCCCCC] p-4 flex gap-4 items-start shadow-2xs">
               <div className="w-24 text-center font-bold text-xs uppercase tracking-widest text-[#333333] pt-2">
                 HISTORY
@@ -694,106 +684,49 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
-{/* MENU PAYMENT GATEWAY FLIP.ID SETTINGS */}
-<div className="bg-[#E5E0D8] border border-[#B3AE9F] p-4 space-y-3 my-6">
-  <div className="flex justify-between items-center border-b border-[#CCCCCC] pb-2">
-    <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[#333333]">
-      PAYMENT GATEWAY (FLIP.ID INTEGRATION)
-    </h3>
-    <span className="bg-[#00A896] text-white text-[8px] font-bold px-2 py-0.5 uppercase tracking-widest rounded-xs">
-      STATUS: AKTIF (CONNECTED)
-    </span>
-  </div>
-
-  <div className="grid grid-cols-2 gap-3 text-[9px] font-bold uppercase">
-    <div>
-      <label className="text-gray-600 block mb-1">FLIP SECRET KEY</label>
-      <input
-        type="password"
-        value="••••••••••••••••••••••••"
-        disabled
-        className="w-full bg-white border border-[#CCCCCC] p-1.5 text-gray-500"
-      />
-    </div>
-    <div>
-      <label className="text-gray-600 block mb-1">WEBHOOK CALLBACK URL</label>
-      <input
-        type="text"
-        value="https://capshoegrab.vercel.app/api/flip/callback"
-        disabled
-        className="w-full bg-white border border-[#CCCCCC] p-1.5 text-gray-500 font-mono text-[8px]"
-      />
-    </div>
-  </div>
-</div>
-
-/* MODAL POPUP DISPLAY QR CODE PAYMENT & REALTIME SCAN NOTIFICATION */
-{qrModalData && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
-    <div className="bg-[#EFECE6] border-2 border-[#00A896] p-6 max-w-sm w-full text-center space-y-4 shadow-2xl relative">
-      <button
-        onClick={() => setQrModalData(null)}
-        className="absolute top-2 right-3 text-lg font-bold text-gray-500 hover:text-black"
-      >
-        ✕
-      </button>
-
-      <h3 className="font-serif font-black uppercase text-sm tracking-widest text-[#00A896]">
-        QR PAYMENT UNIK (FLIP.ID)
-      </h3>
-
-      <div className="bg-white p-4 border border-[#CCCCCC] inline-block shadow-inner">
-        <img
-          src={qrModalData.qrImageDataUrl}
-          alt="QR Code Flip Payment"
-          className="w-48 h-48 mx-auto object-contain"
-        />
-      </div>
-
-      <div className="space-y-1 text-center">
-        <p className="text-[10px] uppercase font-mono tracking-widest text-gray-600">
-          INVOICE: <span className="font-bold text-black">{qrModalData.orderNumber}</span>
-        </p>
-        <p className="text-[9px] uppercase tracking-wider text-[#8D5B4C] font-bold animate-pulse">
-          • MENUNGGU SCAN & PEMBAYARAN...
-        </p>
-      </div>
-
-      <div className="pt-2 flex gap-2">
-        <button
-          onClick={() => window.open(qrModalData.paymentUrl || '#', '_blank')}
-          className="flex-1 bg-[#00A896] hover:bg-[#008D7D] text-white py-2 text-[10px] font-bold uppercase tracking-wider"
-        >
-          BUKA PAYMENT LINK
-        </button>
-        <button
-          onClick={() => setQrModalData(null)}
-          className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 text-[10px] font-bold uppercase tracking-wider"
-        >
-          TUTUP
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-      {/* MODAL DISPLAY QR PAYMENT UNIK (FLIP.ID) */}
+      {/* SINGLE QR PAYMENT MODAL DISPLAY */}
       {qrModalData && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 max-w-sm w-full text-center space-y-4 rounded shadow-2xl">
-            <h3 className="font-bold uppercase text-sm tracking-widest text-[#00A896]">
-              QR PAYMENT UNIK (FLIP.ID)
-            </h3>
-            <img src={qrModalData.qrImageDataUrl} alt="QR Code" className="w-48 h-48 mx-auto border p-2" />
-            <p className="text-[10px] text-gray-500 font-mono">
-              Invoice: {qrModalData.orderNumber}
-            </p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
+          <div className="bg-[#EFECE6] border-2 border-[#00A896] p-6 max-w-sm w-full text-center space-y-4 shadow-2xl relative">
             <button
               onClick={() => setQrModalData(null)}
-              className="w-full bg-gray-200 py-2 text-xs font-bold uppercase tracking-widest hover:bg-gray-300"
+              className="absolute top-2 right-3 text-lg font-bold text-gray-500 hover:text-black"
             >
-              TUTUP
+              ✕
             </button>
+
+            <h3 className="font-serif font-black uppercase text-sm tracking-widest text-[#00A896]">
+              QR PAYMENT UNIK (FLIP.ID)
+            </h3>
+
+            <div className="bg-white p-4 border border-[#CCCCCC] inline-block shadow-inner">
+              <img
+                src={qrModalData.qrImageDataUrl}
+                alt="QR Code Payment"
+                className="w-48 h-48 mx-auto object-contain"
+              />
+            </div>
+
+            <div className="space-y-1 text-center">
+              <p className="text-[10px] uppercase font-mono tracking-widest text-gray-600">
+                INVOICE: <span className="font-bold text-black">{qrModalData.orderNumber}</span>
+              </p>
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={() => window.open(qrModalData.paymentUrl || '#', '_blank')}
+                className="flex-1 bg-[#00A896] hover:bg-[#008D7D] text-white py-2 text-[10px] font-bold uppercase tracking-wider"
+              >
+                PAYMENT LINK
+              </button>
+              <button
+                onClick={() => setQrModalData(null)}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 text-[10px] font-bold uppercase tracking-wider"
+              >
+                TUTUP
+              </button>
+            </div>
           </div>
         </div>
       )}
